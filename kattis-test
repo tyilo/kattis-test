@@ -7,7 +7,6 @@ from signal import Signals
 from subprocess import check_call, run, Popen, PIPE
 from tempfile import NamedTemporaryFile
 import requests
-from pyquery import PyQuery as pq
 from collections import namedtuple
 from zipfile import ZipFile
 from io import BytesIO
