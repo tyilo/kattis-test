@@ -234,10 +234,10 @@ def main():
 			print('Unknown language:', language, file=sys.stderr)
 			return 1
 	else:
-		if os.access(args.file, os.X_OK):
-			language = 'binary'
-		elif ext in DEFAULT_COMPILERS:
+		if ext in DEFAULT_COMPILERS:
 			language = DEFAULT_COMPILERS[ext]
+		elif os.access(args.file, os.X_OK):
+			language = 'binary'
 		else:
 			print('I don\'t know how to compile/run %s' % args.file, file=sys.stderr)
 			return 1
