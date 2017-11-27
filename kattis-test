@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+import sys
+import os
+from argparse import ArgumentParser
+from pathlib import Path
+from signal import Signals
+from subprocess import check_call, run, Popen, PIPE
+from tempfile import NamedTemporaryFile
+import requests
+from pyquery import PyQuery as pq
+from collections import namedtuple
+
+
+class InputFile:
+	def __eq__(self, other):
+		return isinstance(other, self.__class__)
+
+
+class TempFile:
+	def __init__(self, name):
+		self.name = name
+
+	def __eq__(self, other):
+		if isinstance(other, self.__class__):
+			return self.name == other.name
+		else:
+			return False
+
+
+CompilerInfo = namedtuple('CompilerInfo', ['compile', 'run', 'kattis'])
+
+
+COMPILERS = {
+	'binary': CompilerInfo(
+		compile=None,
+		run=[InputFile()],
+		kattis=None
+	),
+	'python2': CompilerInfo(
+		compile=None,
+		run=['python2', InputFile()],
+		kattis='Python 2'
+	),
+	'python3': CompilerInfo(
+		compile=None,
+		run=['python3', InputFile()],
+		kattis='Python 3'
+	),
+	'pypy': CompilerInfo(
+		compile=None,
+		run=['pypy', InputFile()],
+		kattis='Python 2'
+	),
+	'c++': CompilerInfo(
+		compile=['g++', '-Wall', '-O2', '-std=gnu++11', InputFile(), '-o', TempFile('binary')],
+		run=[TempFile('binary')],
+		kattis='C++'
+	),
+}
+
+DEFAULT_COMPILERS = {
+	'py': 'pypy',
+	'cpp': 'c++',
+}
+
+def get_samples(problem_id):
+	response = requests.get('https://open.kattis.com/problems/%s' % problem_id)
+	if response.status_code != 200:
+		raise Exception('Problem with id "%s" not found!' % problem_id)
+
+	d = pq(response.content)
+
+	samples = []
+	for i, t in enumerate(d('.sample')):
+		samples.append((str(i + 1),) + tuple(el.text.lstrip() for el in d(t)('pre')))
+
+	return samples
+
+
+class Compiler:
+	def __init__(self, input_file, compile_cmd, run_cmd):
+		self.input_file = str(Path(input_file).absolute())
+		self.compile_cmd = compile_cmd
+		self.run_cmd = run_cmd
+
+	def __enter__(self):
+		self.tempfiles = {}
+		for arg in (self.compile_cmd or []) + self.run_cmd:
+			if isinstance(arg, TempFile):
+				if not arg.name in self.tempfiles:
+					self.tempfiles[arg.name] = NamedTemporaryFile(delete=False).name
+
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		for fname in self.tempfiles.values():
+			os.remove(fname)
+
+	def transform_arg(self, arg):
+		if isinstance(arg, InputFile):
+			return self.input_file
+
+		if isinstance(arg, TempFile):
+			return self.tempfiles[arg.name]
+
+		return arg
+
+	def transform_cmd(self, cmd):
+		return [self.transform_arg(arg) for arg in cmd]
+
+	def compile(self):
+		if self.compile_cmd:
+			check_call(self.transform_cmd(self.compile_cmd))
+
+	def run(self, stdin):
+		p = Popen(self.transform_cmd(self.run_cmd), stdin=PIPE, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+		stdout, stderr = p.communicate(stdin)
+		return (p.returncode, stdout, stderr)
+
+
+def normalize_output(s):
+	return '\n'.join([l.strip() for l in s.strip().split('\n')])
+
+
+def get_float_diff(s1, s2):
+	reld = 0
+	absd = 0
+
+	ls1 = s1.split('\n')
+	ls2 = s2.split('\n')
+	if len(ls1) != len(ls2):
+		return None
+
+	for l1, l2 in zip(ls1, ls2):
+		vs1 = l1.split()
+		vs2 = l2.split()
+		if len(vs1) != len(vs2):
+			return None
+
+		for v1, v2 in zip(vs1, vs2):
+			if v1 == v2:
+				continue
+
+			try:
+				f1 = float(v1)
+				f2 = float(v2)
+				d = abs(f1 - f2)
+				absd = max(absd, d)
+				try:
+					reld = max(reld, d / abs(f2))
+				except ZeroDivisionError:
+					pass
+				continue
+			except ValueError:
+				pass
+
+			return None
+
+	# Everything, but float matches perfectly
+	return (absd, reld)
+
+
+def compare_outputs(output, expected_output):
+	if output == expected_output:
+		print('Success')
+		return True
+
+	fd = get_float_diff(output, expected_output)
+	if fd:
+		absd, reld = fd
+		if absd < 1.0:
+			if absd == 0.0 and reld == 0.0:
+				print('Ok with no float error.')
+			else:
+				print('Ok with float error:')
+				print('  {:e} absolute'.format(absd))
+				print('  {:e} relative'.format(reld))
+				print('  {:e} min'.format(min(absd, reld)))
+
+			return True
+
+	print('Wrong output, got:')
+	print(output)
+	print('Expected:')
+	print(expected_output)
+
+	return False
+
+
+def main():
+	parser = ArgumentParser(description='Test program on kattis sample inputs')
+	parser.add_argument('-p', '--problem-id', dest='problem_id',
+			          help='set the problem id')
+	parser.add_argument('-d', '--directory', dest='dir',
+			          help='use samples from directory instead of downloading from open kattis')
+	parser.add_argument('-l', '--language', dest='lang',
+			          help='specify language')
+	parser.add_argument('-s', '--submit', dest='submit', action='store_true',
+			          help='specify language')
+	parser.add_argument('file')
+
+	args = parser.parse_args()
+
+	fparts = args.file.rsplit('.', 1)
+	problem_id = args.problem_id or fparts[0]
+	ext = None if len(fparts) == 1 else fparts[1]
+
+	language = args.lang
+
+	if language:
+		if language not in COMPILERS:
+			print('Unknown language:', language)
+			return 1
+	else:
+		if os.access(args.file, os.X_OK):
+			language = 'binary'
+		elif ext in DEFAULT_COMPILERS:
+			language = DEFAULT_COMPILERS[ext]
+		else:
+			print('I don\'t know how to compile/run %s' % args.file)
+			return 1
+
+	compiler = COMPILERS[language]
+
+	if args.dir:
+		samples = []
+		for p in sorted(Path(args.dir).glob('*.in*')):
+			parts = p.name.split('.in')
+			if parts[1] == '' or parts[1][0] == '.':
+				with p.open() as f:
+					in_sample = f.read()
+
+				out_p = p.parent / '.ans'.join(parts)
+				if not out_p.exists():
+					out_p = p.parent / '.out'.join(parts)
+
+				with out_p.open() as f:
+					out_sample = f.read()
+
+				samples.append((parts[0], in_sample, out_sample))
+	else:
+		print('Retrieving samples...')
+		try:
+			samples = get_samples(problem_id)
+		except Exception as e:
+			print(e.args[0])
+			return 1
+
+	all_correct = True
+	with Compiler(args.file, compiler.compile, compiler.run) as c:
+		print('Compiling...')
+		c.compile()
+
+		print('Running program...')
+		for s in samples:
+			print('Sample %s: ' % s[0], end='')
+
+			exit_code, stdout, stderr = c.run(s[1])
+			if stderr:
+				print(stderr, file=sys.stderr)
+
+			if exit_code != 0:
+				if exit_code < 0:
+					s = -exit_code
+					try:
+						name = Signals(s).name
+					except ValueError:
+						name = 'unknown'
+
+					print('Program exited with signal %s (%s)' % (s, name))
+				else:
+					print('Program exited with code %s' % exit_code)
+
+				return 1
+
+			output = normalize_output(stdout)
+			expected_output = normalize_output(s[2])
+
+			all_correct &= compare_outputs(output, expected_output)
+
+		if all_correct and args.submit:
+			kattis_language = compiler.kattis
+			if not kattis_language:
+				print('Can\'t submit %s file to kattis' % language)
+
+				return 1
+
+			else:
+				run(['kattis', args.file, '-l', kattis_language, '-p', problem_id])
+
+
+if __name__ == '__main__':
+	sys.exit(main())
