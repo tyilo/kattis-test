@@ -9,6 +9,14 @@ from tempfile import NamedTemporaryFile
 import requests
 from pyquery import PyQuery as pq
 from collections import namedtuple
+from zipfile import ZipFile
+from io import BytesIO
+
+
+SAMPLE_CACHE_DIR = Path.home() / '.config' / 'kattis-test'
+
+class SamplesNotFoundException(BaseException):
+	pass
 
 
 class InputFile:
@@ -27,6 +35,7 @@ class TempFile:
 			return False
 
 
+Sample = namedtuple('Sample', ['name', 'input', 'output'])
 CompilerInfo = namedtuple('CompilerInfo', ['compile', 'run', 'kattis'])
 
 
@@ -63,18 +72,31 @@ DEFAULT_COMPILERS = {
 	'cpp': 'c++',
 }
 
-def get_samples(problem_id):
-	response = requests.get('https://open.kattis.com/problems/%s' % problem_id)
-	if response.status_code != 200:
-		raise Exception('Problem with id "%s" not found!' % problem_id)
 
-	d = pq(response.content)
+def get_sample_dir(problem_id):
+	return SAMPLE_CACHE_DIR / problem_id
 
-	samples = []
-	for i, t in enumerate(d('.sample')):
-		samples.append((str(i + 1),) + tuple(el.text.lstrip() for el in d(t)('pre')))
 
-	return samples
+def get_samples(sample_dir):
+	for in_p in sorted(Path(sample_dir).glob('*.in*')):
+		index, description = in_p.name.split('.in', maxsplit=1)
+		if description == '' or description[0] == '.':
+			out_p = in_p.parent / in_p.name.replace('.in', '.ans', 1)
+			if not out_p.exists():
+				out_p = in_p.parent / in_p.name.replace('.in', '.out', 1)
+
+			assert out_p.exists()
+
+			yield Sample(index, in_p, out_p)
+
+
+def download_samples(problem_id, sample_dir):
+	r = requests.get('https://open.kattis.com/problems/%s/file/statement/samples.zip' % problem_id)
+	if r.status_code != 200:
+		raise SamplesNotFoundException()
+
+	with ZipFile(BytesIO(r.content)) as z:
+		z.extractall(sample_dir)
 
 
 class Compiler:
@@ -112,9 +134,10 @@ class Compiler:
 		if self.compile_cmd:
 			check_call(self.transform_cmd(self.compile_cmd))
 
-	def run(self, stdin):
-		p = Popen(self.transform_cmd(self.run_cmd), stdin=PIPE, stdout=PIPE, stderr=PIPE, encoding='utf-8')
-		stdout, stderr = p.communicate(stdin)
+	def run(self, stdin_file):
+		with open(stdin_file) as stdin:
+			p = Popen(self.transform_cmd(self.run_cmd), stdin=stdin, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+		stdout, stderr = p.communicate()
 		return (p.returncode, stdout, stderr)
 
 
@@ -209,7 +232,7 @@ def main():
 
 	if language:
 		if language not in COMPILERS:
-			print('Unknown language:', language)
+			print('Unknown language:', language, file=sys.stderr)
 			return 1
 	else:
 		if os.access(args.file, os.X_OK):
@@ -217,34 +240,31 @@ def main():
 		elif ext in DEFAULT_COMPILERS:
 			language = DEFAULT_COMPILERS[ext]
 		else:
-			print('I don\'t know how to compile/run %s' % args.file)
+			print('I don\'t know how to compile/run %s' % args.file, file=sys.stderr)
 			return 1
 
 	compiler = COMPILERS[language]
 
 	if args.dir:
-		samples = []
-		for p in sorted(Path(args.dir).glob('*.in*')):
-			parts = p.name.split('.in')
-			if parts[1] == '' or parts[1][0] == '.':
-				with p.open() as f:
-					in_sample = f.read()
-
-				out_p = p.parent / '.ans'.join(parts)
-				if not out_p.exists():
-					out_p = p.parent / '.out'.join(parts)
-
-				with out_p.open() as f:
-					out_sample = f.read()
-
-				samples.append((parts[0], in_sample, out_sample))
+		sample_dir = Path(args.dir)
 	else:
-		print('Retrieving samples...')
-		try:
-			samples = get_samples(problem_id)
-		except Exception as e:
-			print(e.args[0])
-			return 1
+		sample_dir = get_sample_dir(problem_id)
+		if not sample_dir.exists():
+			sample_dir.mkdir(parents=True)
+			try:
+				print('Retrieving samples...')
+				download_samples(problem_id, sample_dir)
+			except Exception as e:
+				sample_dir.rmdir()
+
+				if isinstance(e, SamplesNotFoundException):
+					print('Could not find samples for problem %s on kattis' % problem_id, file=sys.stderr)
+					return 1
+
+
+				raise
+
+	samples = get_samples(sample_dir)
 
 	all_correct = True
 	with Compiler(args.file, compiler.compile, compiler.run) as c:
@@ -252,10 +272,10 @@ def main():
 		c.compile()
 
 		print('Running program...')
-		for s in samples:
-			print('Sample %s: ' % s[0], end='')
+		for sample in samples:
+			print('Sample %s: ' % sample.name, end='')
 
-			exit_code, stdout, stderr = c.run(s[1])
+			exit_code, stdout, stderr = c.run(sample.input)
 			if stderr:
 				print(stderr, file=sys.stderr)
 
@@ -274,14 +294,15 @@ def main():
 				return 1
 
 			output = normalize_output(stdout)
-			expected_output = normalize_output(s[2])
+			with open(sample.output) as f:
+				expected_output = normalize_output(f.read())
 
 			all_correct &= compare_outputs(output, expected_output)
 
 		if all_correct and args.submit:
 			kattis_language = compiler.kattis
 			if not kattis_language:
-				print('Can\'t submit %s file to kattis' % language)
+				print('Can\'t submit %s file to kattis' % language, file=sys.stderr)
 
 				return 1
 
