@@ -90,7 +90,7 @@ def get_samples(sample_dir):
 
 
 def download_samples(problem_id, sample_dir):
-	r = requests.get('https://open.kattis.com/problems/%s/file/statement/samples.zip' % problem_id)
+	r = requests.get(f'https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip')
 	if r.status_code != 200:
 		raise SamplesNotFoundException()
 
@@ -247,7 +247,7 @@ def main():
 		elif os.access(args.file, os.X_OK):
 			language = 'binary'
 		else:
-			print('I don\'t know how to compile/run %s' % args.file, file=sys.stderr)
+			print(f'I don\'t know how to compile/run {args.file}', file=sys.stderr)
 			return 1
 
 	compiler = COMPILERS[language]
@@ -265,7 +265,7 @@ def main():
 				sample_dir.rmdir()
 
 				if isinstance(e, SamplesNotFoundException):
-					print('Could not find samples for problem %s on kattis' % problem_id, file=sys.stderr)
+					print(f'Could not find samples for problem {problem_id} on kattis', file=sys.stderr)
 					return 1
 
 
@@ -280,7 +280,7 @@ def main():
 
 		print('Running program...')
 		for sample in samples:
-			print('Sample %s: ' % sample.name, end='')
+			print(f'Sample {sample.name}: ', end='')
 
 			exit_code, stdout, stderr = c.run(sample.input)
 			if stderr:
@@ -294,9 +294,9 @@ def main():
 					except ValueError:
 						name = 'unknown'
 
-					print('Program exited with signal %s (%s)' % (s, name))
+					print(f'Program exited with signal {s} ({name})')
 				else:
-					print('Program exited with code %s' % exit_code)
+					print(f'Program exited with code {exit_code}')
 
 				return 1
 
@@ -309,7 +309,7 @@ def main():
 		if all_correct and args.submit:
 			kattis_language = compiler.kattis
 			if not kattis_language:
-				print('Can\'t submit %s file to kattis' % language, file=sys.stderr)
+				print(f'Can\'t submit {language} file to kattis', file=sys.stderr)
 
 				return 1
 
