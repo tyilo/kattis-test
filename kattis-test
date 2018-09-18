@@ -218,7 +218,7 @@ def main():
 	parser.add_argument('-l', '--language', dest='lang',
 			          help='specify language')
 	parser.add_argument('-s', '--submit', dest='submit', action='store_true',
-			          help='specify language')
+			          help='submit file to kattis if all tests succeeds, using `kattis` cli')
 	parser.add_argument('file')
 
 	args = parser.parse_args()
