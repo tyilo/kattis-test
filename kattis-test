@@ -314,7 +314,7 @@ def main():
 				return 1
 
 			else:
-				run(['kattis', args.file, '-l', kattis_language, '-p', problem_id])
+				run(['kattis', args.file, '--language', kattis_language, '--problem', problem_id])
 
 
 if __name__ == '__main__':
