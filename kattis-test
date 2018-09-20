@@ -14,7 +14,7 @@ from io import BytesIO
 
 SAMPLE_CACHE_DIR = Path.home() / '.config' / 'kattis-test'
 
-class SamplesNotFoundException(BaseException):
+class SamplesNotFoundException(Exception):
 	pass
 
 
