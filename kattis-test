@@ -306,7 +306,10 @@ def main():
 
 			all_correct &= compare_outputs(output, expected_output)
 
-		if all_correct and args.submit:
+		if not all_correct:
+			return 1
+
+		if args.submit:
 			kattis_language = compiler.kattis
 			if not kattis_language:
 				print(f'Can\'t submit {language} file to kattis', file=sys.stderr)
