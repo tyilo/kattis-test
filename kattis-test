@@ -232,6 +232,8 @@ def main():
 			          help='specify language')
 	parser.add_argument('-s', '--submit', dest='submit', action='store_true',
 			          help='submit file to kattis if all tests succeeds, using `kattis` cli')
+	parser.add_argument('-f', '--force', dest='force', action='store_true',
+			          help='submit even if some tests fails')
 	parser.add_argument('file', type=file_path)
 
 	args = parser.parse_args()
@@ -306,7 +308,7 @@ def main():
 
 			all_correct &= compare_outputs(output, expected_output)
 
-		if not all_correct:
+		if not all_correct and not args.force:
 			return 1
 
 		if args.submit:
