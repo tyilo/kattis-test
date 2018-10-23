@@ -60,7 +60,7 @@ COMPILERS = {
 		kattis='Python 2'
 	),
 	'c++': CompilerInfo(
-		compile=['g++', '-Wall', '-O2', '-std=gnu++11', InputFile(), '-o', TempFile('binary')],
+		compile=['g++', '-Wall', '-O2', '-std=gnu++14', InputFile(), '-o', TempFile('binary')],
 		run=[TempFile('binary')],
 		kattis='C++'
 	),
