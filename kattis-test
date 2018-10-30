@@ -10,6 +10,7 @@ import requests
 from collections import namedtuple
 from zipfile import ZipFile
 from io import BytesIO
+from shutil import which
 
 
 SAMPLE_CACHE_DIR = Path.home() / '.config' / 'kattis-test'
@@ -66,8 +67,15 @@ COMPILERS = {
 	),
 }
 
+
+def default_python():
+	for python in ['pypy', 'python2', 'python3']:
+		if which(python):
+			return python
+
+
 DEFAULT_COMPILERS = {
-	'.py': 'pypy',
+	'.py': default_python(),
 	'.cpp': 'c++',
 }
 
@@ -248,9 +256,10 @@ def main():
 			language = DEFAULT_COMPILERS[ext]
 		elif os.access(args.file, os.X_OK):
 			language = 'binary'
-		else:
-			print(f'I don\'t know how to compile/run {args.file}', file=sys.stderr)
-			return 1
+
+	if not language:
+		print(f'I don\'t know how to compile/run {args.file}', file=sys.stderr)
+		return 1
 
 	compiler = COMPILERS[language]
 
