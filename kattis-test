@@ -212,11 +212,6 @@ def compare_outputs(output, expected_output):
 
 			return True
 
-	print('Wrong output, got:')
-	print(output)
-	print('Expected:')
-	print(expected_output)
-
 	return False
 
 
@@ -245,6 +240,8 @@ def main():
 			          help='submit file to kattis if all tests succeeds, using `kattis` cli')
 	parser.add_argument('-f', '--force', dest='force', action='store_true',
 			          help='submit even if some tests fails')
+	parser.add_argument('--show-output', dest='show_output', action='store_true',
+			          help='show output of runs even when they succeed')
 	parser.add_argument('file', type=file_path)
 
 	args = parser.parse_args()
@@ -318,7 +315,13 @@ def main():
 			with open(sample.output) as f:
 				expected_output = normalize_output(f.read())
 
-			all_correct &= compare_outputs(output, expected_output)
+			success = compare_outputs(output, expected_output)
+			if not success or args.show_output:
+				print('Output:' if success else 'Wrong output, got:')
+				print(output)
+				print('Expected:')
+				print(expected_output)
+			all_correct &= success
 
 		if not all_correct and not args.force:
 			return 1
