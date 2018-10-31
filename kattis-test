@@ -11,6 +11,7 @@ from collections import namedtuple
 from zipfile import ZipFile
 from io import BytesIO
 from shutil import which
+from math import isnan
 
 
 SAMPLE_CACHE_DIR = Path.home() / '.config' / 'kattis-test'
@@ -174,6 +175,8 @@ def get_float_diff(s1, s2):
 			try:
 				f1 = float(v1)
 				f2 = float(v2)
+				if isnan(f1):
+					return None
 				d = abs(f1 - f2)
 				absd = max(absd, d)
 				try:
