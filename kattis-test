@@ -55,8 +55,10 @@ COMPILERS = {
         compile=[
             "g++",
             "-Wall",
+            "-g",
             "-O2",
-            "-std=gnu++14",
+            "-std=gnu++17",
+            "-static",
             InputFile(),
             "-o",
             TempFile("binary"),
