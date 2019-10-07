@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import re
 from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 from signal import Signals
@@ -215,6 +216,14 @@ def compare_outputs(output, expected_output):
 	return False
 
 
+def guess_problem_id(path):
+	m = re.search(r'^[a-z0-9]+', path.stem)
+	if not m:
+		return None
+
+	return m.group()
+
+
 def file_path(filename):
 	path = Path(filename)
 	if not path.is_file():
@@ -246,7 +255,7 @@ def main():
 
 	args = parser.parse_args()
 
-	problem_id = args.problem_id or args.file.stem
+	problem_id = args.problem_id or guess_problem_id(args.file)
 	ext = args.file.suffix
 
 	language = args.lang
