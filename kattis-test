@@ -51,6 +51,7 @@ COMPILERS = {
         compile=None, run=["python3", InputFile()], kattis="Python 3"
     ),
     "pypy": CompilerInfo(compile=None, run=["pypy", InputFile()], kattis="Python 2"),
+    "pypy3": CompilerInfo(compile=None, run=["pypy3", InputFile()], kattis="Python 3"),
     "c++": CompilerInfo(
         compile=[
             "g++",
@@ -70,7 +71,7 @@ COMPILERS = {
 
 
 def default_python():
-    for python in ["pypy", "python2", "python3"]:
+    for python in ["pypy3", "python3", "pypy", "python2"]:
         if which(python):
             return python
 
