@@ -11,7 +11,6 @@ import requests
 from collections import namedtuple
 from zipfile import ZipFile
 from io import BytesIO
-from shutil import which
 from math import isnan
 
 
@@ -50,7 +49,7 @@ COMPILERS = {
     "python3": CompilerInfo(
         compile=None, run=["python3", InputFile()], kattis="Python 3"
     ),
-    "pypy": CompilerInfo(compile=None, run=["pypy", InputFile()], kattis="Python 2"),
+    "pypy2": CompilerInfo(compile=None, run=["pypy", InputFile()], kattis="Python 2"),
     "pypy3": CompilerInfo(compile=None, run=["pypy3", InputFile()], kattis="Python 3"),
     "c++": CompilerInfo(
         compile=[
@@ -70,13 +69,7 @@ COMPILERS = {
 }
 
 
-def default_python():
-    for python in ["pypy3", "python3", "pypy", "python2"]:
-        if which(python):
-            return python
-
-
-DEFAULT_COMPILERS = {".py": default_python(), ".cpp": "c++"}
+DEFAULT_COMPILERS = {".cpp": "c++"}
 
 
 def get_sample_dir(problem_id):
@@ -229,6 +222,36 @@ def guess_problem_id(path):
     return m.group()
 
 
+def guess_python_version(path):
+    python2_re = re.compile(r"^\s*\bprint\b *[^ \(\),\]]|\braw_input\b|\bxrange\b")
+
+    first = True
+    with path.open() as f:
+        for l in f:
+            if first and l.startswith("#!"):
+                if l.find("python2") != -1:
+                    return 2
+                if l.find("python3") != -1:
+                    return 3
+
+            if python2_re.search(l):
+                return 2
+
+    return 2
+
+
+def guess_language(path):
+    ext = path.suffix
+    if ext == ".py":
+        return "pypy" + str(guess_python_version(path))
+    elif ext in DEFAULT_COMPILERS:
+        return DEFAULT_COMPILERS[ext]
+    elif os.access(path, os.X_OK):
+        return "binary"
+
+    return None
+
+
 def file_path(filename):
     path = Path(filename)
     if not path.is_file():
@@ -287,15 +310,7 @@ def main():
     args = parser.parse_args()
 
     problem_id = args.problem_id or guess_problem_id(args.file)
-    ext = args.file.suffix
-
-    language = args.lang
-
-    if not language:
-        if ext in DEFAULT_COMPILERS:
-            language = DEFAULT_COMPILERS[ext]
-        elif os.access(args.file, os.X_OK):
-            language = "binary"
+    language = args.lang or guess_language(args.file)
 
     if not language:
         print(f"I don't know how to compile/run {args.file}", file=sys.stderr)
