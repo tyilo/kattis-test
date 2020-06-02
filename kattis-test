@@ -253,6 +253,8 @@ def guess_language(path):
 
 
 def file_path(filename):
+    if filename == "-":
+        return Path("/dev/stdin")
     path = Path(filename)
     if not path.is_file():
         raise ArgumentTypeError(f"{filename} is not a file")
@@ -271,7 +273,14 @@ def main():
     parser.add_argument(
         "-p", "--problem-id", dest="problem_id", help="set the problem id"
     )
-    parser.add_argument(
+    sample_group = parser.add_mutually_exclusive_group()
+    sample_group.add_argument(
+        "--sample-file",
+        dest="sample_file",
+        type=file_path,
+        help="use sample file instead of downloading from open kattis",
+    )
+    sample_group.add_argument(
         "-d",
         "--directory",
         dest="dir",
@@ -318,28 +327,32 @@ def main():
 
     compiler = COMPILERS[language]
 
-    if args.dir:
-        sample_dir = args.dir
+    if args.sample_file:
+        samples = [Sample(args.sample_file.name, args.sample_file, Path("/dev/null"))]
+        args.show_output = True
     else:
-        sample_dir = get_sample_dir(problem_id)
-        if not sample_dir.exists():
-            sample_dir.mkdir(parents=True)
-            try:
-                print("Retrieving samples...")
-                download_samples(problem_id, sample_dir)
-            except Exception as e:
-                sample_dir.rmdir()
+        if args.dir:
+            sample_dir = args.dir
+        else:
+            sample_dir = get_sample_dir(problem_id)
+            if not sample_dir.exists():
+                sample_dir.mkdir(parents=True)
+                try:
+                    print("Retrieving samples...")
+                    download_samples(problem_id, sample_dir)
+                except Exception as e:
+                    sample_dir.rmdir()
 
-                if isinstance(e, SamplesNotFoundException):
-                    print(
-                        f"Could not find samples for problem {problem_id} on kattis",
-                        file=sys.stderr,
-                    )
-                    return 1
+                    if isinstance(e, SamplesNotFoundException):
+                        print(
+                            f"Could not find samples for problem {problem_id} on kattis",
+                            file=sys.stderr,
+                        )
+                        return 1
 
-                raise
+                    raise
 
-    samples = get_samples(sample_dir)
+        samples = get_samples(sample_dir)
 
     all_correct = True
     with Compiler(args.file, compiler.compile, compiler.run) as c:
