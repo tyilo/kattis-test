@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-import sys
 import os
 import re
+import sys
 from argparse import ArgumentParser, ArgumentTypeError
-from pathlib import Path
-from signal import Signals
-from subprocess import check_call, run, Popen, PIPE
-from tempfile import NamedTemporaryFile
-import requests
 from collections import namedtuple
-from zipfile import ZipFile
 from io import BytesIO
 from math import isnan
-
+from pathlib import Path
+from signal import Signals
+from subprocess import PIPE, Popen, check_call, run
+from tempfile import NamedTemporaryFile
+from urllib.request import Request, urlopen
+from zipfile import ZipFile
 
 SAMPLE_CACHE_DIR = Path.home() / ".cache" / "kattis-test" / "samples"
 
@@ -90,14 +89,17 @@ def get_samples(sample_dir):
 
 
 def download_samples(problem_id, sample_dir):
-    r = requests.get(
-        f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip"
+    # Kattis blocks the default Python-urllib/x.y user-agent
+    req = Request(
+        f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip",
+        headers={"user-agent": "kattis-test"},
     )
-    if r.status_code != 200:
-        raise SamplesNotFoundException()
+    with urlopen(req) as r:
+        if r.getcode() != 200:
+            raise SamplesNotFoundException()
 
-    with ZipFile(BytesIO(r.content)) as z:
-        z.extractall(sample_dir)
+        with ZipFile(BytesIO(r.read())) as z:
+            z.extractall(sample_dir)
 
 
 class Compiler:
