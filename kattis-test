@@ -14,7 +14,7 @@ from io import BytesIO
 from math import isnan
 
 
-SAMPLE_CACHE_DIR = Path.home() / ".config" / "kattis-test"
+SAMPLE_CACHE_DIR = Path.home() / ".cache" / "kattis-test" / "samples"
 
 
 class SamplesNotFoundException(Exception):
