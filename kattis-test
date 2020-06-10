@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import resource
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from collections import namedtuple
@@ -103,6 +104,8 @@ def download_samples(problem_id, sample_dir):
 
 
 class Compiler:
+    STACK_LIMIT_CHANGED = False
+
     def __init__(self, input_file, compile_cmd, run_cmd):
         self.input_file = str(Path(input_file).absolute())
         self.compile_cmd = compile_cmd
@@ -137,7 +140,14 @@ class Compiler:
         if self.compile_cmd:
             check_call(self.transform_cmd(self.compile_cmd))
 
+    @classmethod
+    def _ensure_stack_limit(cls):
+        if not cls.STACK_LIMIT_CHANGED:
+            resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY,) * 2)
+            cls.STACK_LIMIT_CHANGED = True
+
     def run(self, stdin_file):
+        self._ensure_stack_limit()
         with open(stdin_file) as stdin:
             p = Popen(
                 self.transform_cmd(self.run_cmd),
