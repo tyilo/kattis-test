@@ -237,7 +237,7 @@ def guess_python_version(path):
             if python2_re.search(l):
                 return 2
 
-    return 2
+    return 3
 
 
 def guess_language(path):
