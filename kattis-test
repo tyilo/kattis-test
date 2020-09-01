@@ -12,6 +12,7 @@ from signal import Signals
 from subprocess import PIPE, Popen, check_call, run
 from tempfile import NamedTemporaryFile
 from threading import Thread
+from time import time
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
@@ -372,6 +373,12 @@ def main():
         action="store_true",
         help="compile/run with debug flags",
     )
+    parser.add_argument(
+        "--time",
+        dest="time",
+        action="store_true",
+        help="show timings of test cases",
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
@@ -421,7 +428,13 @@ def main():
         for sample in samples:
             print(f"Sample {sample.name}: ", end="")
 
+            start_time = time()
             exit_code, stdout, stderr = c.run(sample.input, args.show_output)
+            total_time = time() - start_time
+
+            if args.time:
+                print(f"({total_time:.2f}s) ", end="")
+
             if stderr and not args.show_output:
                 print(stderr, file=sys.stderr)
 
