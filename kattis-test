@@ -5,12 +5,13 @@ import resource
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from collections import namedtuple
-from io import BytesIO
+from io import BytesIO, StringIO
 from math import isnan
 from pathlib import Path
 from signal import Signals
 from subprocess import PIPE, Popen, check_call, run
 from tempfile import NamedTemporaryFile
+from threading import Thread
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
@@ -160,7 +161,18 @@ class Compiler:
             resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY,) * 2)
             cls.STACK_LIMIT_CHANGED = True
 
-    def run(self, stdin_file):
+    @classmethod
+    def _show_output(cls, p, fname):
+        in_f = getattr(p, fname)
+        out_f = getattr(sys, fname)
+        r = ""
+        for l in iter(in_f.readline, ""):
+            r += l
+            print(l, end="", file=out_f)
+
+        setattr(p, fname, StringIO(r))
+
+    def run(self, stdin_file, show_output):
         self._ensure_stack_limit()
         with open(stdin_file) as stdin:
             p = Popen(
@@ -170,7 +182,21 @@ class Compiler:
                 stderr=PIPE,
                 encoding="utf-8",
             )
-        stdout, stderr = p.communicate()
+
+        if show_output:
+            print("\nOutput:")
+            ts = []
+            for k in ["stdout", "stderr"]:
+                t = Thread(target=self._show_output, args=[p, k])
+                t.start()
+                ts.append(t)
+
+            for t in ts:
+                t.join()
+
+        p.wait()
+        stdout = p.stdout.read()
+        stderr = p.stderr.read()
         return (p.returncode, stdout, stderr)
 
 
@@ -395,8 +421,8 @@ def main():
         for sample in samples:
             print(f"Sample {sample.name}: ", end="")
 
-            exit_code, stdout, stderr = c.run(sample.input)
-            if stderr:
+            exit_code, stdout, stderr = c.run(sample.input, args.show_output)
+            if stderr and not args.show_output:
                 print(stderr, file=sys.stderr)
 
             if exit_code != 0:
@@ -418,8 +444,8 @@ def main():
                 expected_output = normalize_output(f.read())
 
             success = compare_outputs(output, expected_output)
-            if not success or args.show_output:
-                print("Output:" if success else "Wrong output, got:")
+            if not success:
+                print("Wrong output, got:")
                 print(output)
                 print("Expected:")
                 print(expected_output)
