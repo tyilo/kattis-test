@@ -37,6 +37,12 @@ class TempFile:
             return False
 
 
+class DebugArg:
+    def __init__(self, arg, enable_on_debug=True):
+        self.arg = arg
+        self.enable_on_debug = enable_on_debug
+
+
 Sample = namedtuple("Sample", ["name", "input", "output"])
 CompilerInfo = namedtuple("CompilerInfo", ["compile", "run", "kattis"])
 
@@ -58,7 +64,8 @@ COMPILERS = {
             "-g",
             "-O2",
             "-std=gnu++17",
-            "-static",
+            DebugArg("-static", False),
+            DebugArg("-fsanitize=undefined,address"),
             InputFile(),
             "-o",
             TempFile("binary"),
@@ -106,10 +113,11 @@ def download_samples(problem_id, sample_dir):
 class Compiler:
     STACK_LIMIT_CHANGED = False
 
-    def __init__(self, input_file, compile_cmd, run_cmd):
+    def __init__(self, input_file, compile_cmd, run_cmd, debug):
         self.input_file = str(Path(input_file).absolute())
         self.compile_cmd = compile_cmd
         self.run_cmd = run_cmd
+        self.debug = debug
 
     def __enter__(self):
         self.tempfiles = {}
@@ -125,16 +133,22 @@ class Compiler:
             os.remove(fname)
 
     def transform_arg(self, arg):
+        if isinstance(arg, DebugArg):
+            if self.debug == arg.enable_on_debug:
+                return self.transform_arg(arg.arg)
+            else:
+                return []
+
         if isinstance(arg, InputFile):
-            return self.input_file
+            return [self.input_file]
 
         if isinstance(arg, TempFile):
-            return self.tempfiles[arg.name]
+            return [self.tempfiles[arg.name]]
 
-        return arg
+        return [arg]
 
     def transform_cmd(self, cmd):
-        return [self.transform_arg(arg) for arg in cmd]
+        return sum((self.transform_arg(arg) for arg in cmd), [])
 
     def compile(self):
         if self.compile_cmd:
@@ -326,6 +340,12 @@ def main():
         action="store_true",
         help="show output of runs even when they succeed",
     )
+    parser.add_argument(
+        "--debug",
+        dest="debug",
+        action="store_true",
+        help="compile/run with debug flags",
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
@@ -367,7 +387,7 @@ def main():
         samples = get_samples(sample_dir)
 
     all_correct = True
-    with Compiler(args.file, compiler.compile, compiler.run) as c:
+    with Compiler(args.file, compiler.compile, compiler.run, args.debug) as c:
         print("Compiling...")
         c.compile()
 
