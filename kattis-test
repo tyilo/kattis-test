@@ -374,9 +374,6 @@ def main():
         help="compile/run with debug flags",
     )
     parser.add_argument(
-        "--time", dest="time", action="store_true", help="show timings of test cases",
-    )
-    parser.add_argument(
         "--failfast",
         dest="failfast",
         action="store_true",
@@ -438,8 +435,7 @@ def main():
             exit_code, stdout, stderr = c.run(sample.input, args.show_output)
             total_time = time() - start_time
 
-            if args.time:
-                print(f"({total_time:.2f}s) ", end="")
+            print(f"({total_time:.2f}s) ", end="")
 
             if stderr and not args.show_output:
                 print(stderr, file=sys.stderr)
