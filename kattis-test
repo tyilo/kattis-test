@@ -379,6 +379,13 @@ def main():
         action="store_true",
         help="stop running on first failed sample",
     )
+    parser.add_argument(
+        "--run",
+        dest="sample_file",
+        action="store_const",
+        const=Path("/dev/stdin"),
+        help="just run program without checking sample inputs and outputs",
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
@@ -393,7 +400,7 @@ def main():
     compiler = COMPILERS[language]
 
     if args.sample_file:
-        samples = [Sample(args.sample_file.name, args.sample_file, Path("/dev/null"))]
+        samples = [Sample(args.sample_file.name, args.sample_file, None)]
         args.show_output = True
     else:
         if args.dir:
@@ -454,17 +461,21 @@ def main():
 
                 return 1
 
-            output = normalize_output(stdout)
-            with open(sample.output) as f:
-                expected_output = normalize_output(f.read())
+            if sample.output:
+                output = normalize_output(stdout)
+                with open(sample.output) as f:
+                    expected_output = normalize_output(f.read())
 
-            success = compare_outputs(output, expected_output)
-            if not success:
-                print("Wrong output, got:")
-                print(output)
-                print("Expected:")
-                print(expected_output)
-            all_correct &= success
+                success = compare_outputs(output, expected_output)
+                if not success:
+                    print("Wrong output, got:")
+                    print(output)
+                    print("Expected:")
+                    print(expected_output)
+                all_correct &= success
+            elif not args.show_output:
+                print("Output:")
+                print(stdout)
 
     if not all_correct and not args.force:
         return 1
