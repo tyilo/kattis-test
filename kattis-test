@@ -374,10 +374,13 @@ def main():
         help="compile/run with debug flags",
     )
     parser.add_argument(
-        "--time",
-        dest="time",
+        "--time", dest="time", action="store_true", help="show timings of test cases",
+    )
+    parser.add_argument(
+        "--failfast",
+        dest="failfast",
         action="store_true",
-        help="show timings of test cases",
+        help="stop running on first failed sample",
     )
     parser.add_argument("file", type=file_path)
 
@@ -427,6 +430,9 @@ def main():
         print("Running program...")
         for sample in samples:
             print(f"Sample {sample.name}: ", end="")
+            if not all_correct and args.failfast:
+                print("Skipped")
+                continue
 
             start_time = time()
             exit_code, stdout, stderr = c.run(sample.input, args.show_output)
@@ -464,27 +470,27 @@ def main():
                 print(expected_output)
             all_correct &= success
 
-        if not all_correct and not args.force:
+    if not all_correct and not args.force:
+        return 1
+
+    if args.submit:
+        kattis_language = compiler.kattis
+        if not kattis_language:
+            print(f"Can't submit {language} file to kattis", file=sys.stderr)
+
             return 1
 
-        if args.submit:
-            kattis_language = compiler.kattis
-            if not kattis_language:
-                print(f"Can't submit {language} file to kattis", file=sys.stderr)
-
-                return 1
-
-            else:
-                run(
-                    [
-                        "kattis",
-                        args.file,
-                        "--language",
-                        kattis_language,
-                        "--problem",
-                        problem_id,
-                    ]
-                )
+        else:
+            run(
+                [
+                    "kattis",
+                    args.file,
+                    "--language",
+                    kattis_language,
+                    "--problem",
+                    problem_id,
+                ]
+            )
 
 
 if __name__ == "__main__":
