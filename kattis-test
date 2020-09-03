@@ -490,7 +490,7 @@ def main():
             return 1
 
         else:
-            run(
+            p = run(
                 [
                     "kattis",
                     args.file,
@@ -500,6 +500,7 @@ def main():
                     problem_id,
                 ]
             )
+            return p.returncode
 
 
 if __name__ == "__main__":
