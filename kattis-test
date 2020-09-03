@@ -462,6 +462,7 @@ def main():
                 else:
                     print(f"Program exited with code {exit_code} ({time_str})")
 
+                all_correct = False
                 continue
 
             if sample.output:
