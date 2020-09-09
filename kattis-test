@@ -5,13 +5,13 @@ import resource
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO, StringIO
 from math import isnan
 from pathlib import Path
 from signal import Signals
 from subprocess import PIPE, Popen, check_call, run
 from tempfile import NamedTemporaryFile
-from threading import Thread
 from time import time
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
@@ -171,7 +171,7 @@ class Compiler:
             r += l
             print(l, end="", file=out_f)
 
-        setattr(p, fname, StringIO(r))
+        return r
 
     def run(self, stdin_file, show_output):
         self._ensure_stack_limit()
@@ -186,18 +186,13 @@ class Compiler:
 
         if show_output:
             print("\nOutput:")
-            ts = []
-            for k in ["stdout", "stderr"]:
-                t = Thread(target=self._show_output, args=[p, k])
-                t.start()
-                ts.append(t)
+            with ThreadPoolExecutor() as executor:
+                ts = [executor.submit(self._show_output, p, k) for k in ["stdout", "stderr"]]
+                p.wait()
+                stdout, stderr = [f.result() for f in ts]
+        else:
+            stdout, stderr = p.communicate()
 
-            for t in ts:
-                t.join()
-
-        p.wait()
-        stdout = p.stdout.read()
-        stderr = p.stderr.read()
         return (p.returncode, stdout, stderr)
 
 
