@@ -493,7 +493,8 @@ def main():
                     kattis_language,
                     "--problem",
                     problem_id,
-                ]
+                ],
+                input=b"y\n",
             )
             return p.returncode
 
