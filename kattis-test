@@ -393,6 +393,10 @@ def main():
     args = parser.parse_args()
 
     problem_id = args.problem_id or guess_problem_id(args.file)
+    if not problem_id:
+        print("Couldn't guess problem id from filename", file=sys.stderr)
+        return 1
+
     language = args.lang or guess_language(args.file)
 
     if not language:
