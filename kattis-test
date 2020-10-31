@@ -487,20 +487,24 @@ def main():
             sample_dir = get_sample_dir(problem_id)
             if not sample_dir.exists():
                 sample_dir.mkdir(parents=True)
+                got_exception = True
                 try:
                     print("Retrieving samples...")
                     download_samples(problem_id, sample_dir)
-                except Exception as e:
-                    sample_dir.rmdir()
-
-                    if isinstance(e, SamplesNotFoundException):
-                        print(
-                            f"Could not find samples for problem {problem_id} on kattis",
-                            file=sys.stderr,
-                        )
+                    got_exception = False
+                except SamplesNotFoundException as e:
+                    print(
+                        f"Could not find samples for problem {problem_id} on kattis",
+                        file=sys.stderr,
+                    )
+                    if not args.submit:
                         return 1
 
-                    raise
+                    if input("Submit anyway? [yN]: ").lower() != "y":
+                        return 1
+                finally:
+                    if got_exception:
+                        sample_dir.rmdir()
 
         samples = get_samples(sample_dir)
 
