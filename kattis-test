@@ -23,6 +23,9 @@ CACHE_DIR = Path.home() / ".cache" / "kattis-test"
 SAMPLE_CACHE_DIR = CACHE_DIR / "samples"
 CONTEST_CACHE_DIR = CACHE_DIR / "contests"
 
+KATTIS_CFG = ConfigParser()
+KATTIS_CFG.read(Path.home() / ".kattisrc")
+
 
 class SamplesNotFoundException(Exception):
     pass
@@ -113,12 +116,16 @@ def retrieve_url(url):
         return r.read()
 
 
+def get_samples_url(problem_id):
+    hostname = KATTIS_CFG.get("kattis", "hostname", fallback="open.kattis.com")
+    return f"https://{hostname}/problems/{problem_id}/file/statement/samples.zip"
+
+
 def download_samples(problem_id, sample_dir):
     # Kattis blocks the default Python-urllib/x.y user-agent
+    url = get_samples_url(problem_id)
     try:
-        response = retrieve_url(
-            f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip"
-        )
+        response = retrieve_url(url)
     except HTTPError:
         raise SamplesNotFoundException()
 
@@ -284,9 +291,7 @@ def compare_outputs(output, expected_output, time_str):
 
 
 def get_problems_url():
-    cfg = ConfigParser()
-    cfg.read(Path.home() / ".kattisrc")
-    submission_url = cfg.get("kattis", "submissionurl", fallback=None)
+    submission_url = KATTIS_CFG.get("kattis", "submissionurl", fallback=None)
     if not submission_url:
         return None
     return submission_url.replace("/submit", "/problems")
