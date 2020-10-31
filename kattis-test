@@ -274,20 +274,12 @@ def color(s, c):
 
 
 def print_diff(output, expected_output):
-    lines = [("Output", "Expected")] + list(
-        zip_longest(output.splitlines(), expected_output.splitlines(), fillvalue="")
-    )
-    widths = [max(map(len, list(zip(*lines))[i])) for i in range(2)]
-    sep = "  |  "
-
-    for i, (l1, l2) in enumerate(lines):
-        l1_padded = l1.ljust(widths[0])
-        if i != 0 and l1 != l2:
-            l1_padded = color(l1_padded, RED_COLOR)
-            l2 = color(l2, GREEN_COLOR)
-        print(f"{l1_padded}{sep}{l2}")
-        if i == 0:
-            print("=" * (widths[0] + len(sep) + widths[1]))
+    with NamedTemporaryFile(
+        "w", prefix="output.", suffix=".out"
+    ) as f1, NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2:
+        print(output, file=f1, flush=True)
+        print(expected_output, file=f2, flush=True)
+        run(["diff", "--color=always", "--side-by-side", f1.name, f2.name])
 
 
 def compare_outputs(output, expected_output, time_str, diff):
