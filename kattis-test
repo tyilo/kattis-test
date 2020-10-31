@@ -8,6 +8,7 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from configparser import ConfigParser
 from io import BytesIO
+from itertools import zip_longest
 from math import isnan
 from pathlib import Path
 from signal import Signals
@@ -264,13 +265,29 @@ def get_float_diff(s1, s2):
     return (absd, reld)
 
 
+RED_COLOR = 31
+GREEN_COLOR = 32
+
+
+def color(s, c):
+    return "\x1b[%sm%s\x1b[0m" % (c, s)
+
+
 def print_diff(output, expected_output):
-    with NamedTemporaryFile(
-        "w", prefix="output.", suffix=".out"
-    ) as f1, NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2:
-        print(output, file=f1, flush=True)
-        print(expected_output, file=f2, flush=True)
-        run(["diff", "--color=always", "--unified", f1.name, f2.name])
+    lines = [("Output", "Expected")] + list(
+        zip_longest(output.splitlines(), expected_output.splitlines(), fillvalue="")
+    )
+    widths = [max(map(len, list(zip(*lines))[i])) for i in range(2)]
+    sep = "  |  "
+
+    for i, (l1, l2) in enumerate(lines):
+        l1_padded = l1.ljust(widths[0])
+        if i != 0 and l1 != l2:
+            l1_padded = color(l1_padded, RED_COLOR)
+            l2 = color(l2, GREEN_COLOR)
+        print(f"{l1_padded}{sep}{l2}")
+        if i == 0:
+            print("=" * (widths[0] + len(sep) + widths[1]))
 
 
 def compare_outputs(output, expected_output, time_str, diff):
