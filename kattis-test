@@ -6,6 +6,7 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
+from configparser import ConfigParser
 from io import BytesIO
 from math import isnan
 from pathlib import Path
@@ -98,18 +99,26 @@ def get_samples(sample_dir):
             yield Sample(index, in_p, out_p)
 
 
-def download_samples(problem_id, sample_dir):
+def retrieve_url(url):
     # Kattis blocks the default Python-urllib/x.y user-agent
     req = Request(
-        f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip",
+        url,
         headers={"user-agent": "kattis-test"},
     )
     with urlopen(req) as r:
-        if r.getcode() != 200:
-            raise SamplesNotFoundException()
+        return (r.getcode(), r.read())
 
-        with ZipFile(BytesIO(r.read())) as z:
-            z.extractall(sample_dir)
+
+def download_samples(problem_id, sample_dir):
+    # Kattis blocks the default Python-urllib/x.y user-agent
+    code, response = retrieve_url(
+        f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip"
+    )
+    if code != 200:
+        raise SamplesNotFoundException()
+
+    with ZipFile(BytesIO(response)) as z:
+        z.extractall(sample_dir)
 
 
 class Compiler:
@@ -269,12 +278,47 @@ def compare_outputs(output, expected_output, time_str):
     return False
 
 
-def guess_problem_id(path):
-    m = re.search(r"^[a-z0-9]+", path.stem)
-    if not m:
+def get_contest_problem_id(problem_letter):
+    PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
+
+    cfg = ConfigParser()
+    cfg.read(Path.home() / ".kattisrc")
+    submission_url = cfg.get("kattis", "submissionurl", fallback=None)
+    if not submission_url:
         return None
 
-    return m.group()
+    problems_url = submission_url.replace("/submit", "/problems")
+    code, response = retrieve_url(problems_url)
+    if code != 200:
+        return None
+
+    response = str(response, "utf-8")
+    problem_ids = []
+    for l in response.splitlines():
+        m = PROBLEM_ID_RE.search(l)
+        if not m:
+            continue
+
+        problem_ids.append(m.group(1))
+
+    i = ord(problem_letter) - ord("A")
+    if 0 <= i < len(problem_ids):
+        return problem_ids[i]
+
+    return None
+
+
+def guess_problem_id(path):
+    m = re.search(r"^[a-z0-9]+", path.stem)
+    if m:
+        return m.group()
+
+    problem_letter = path.stem[:1]
+
+    if problem_letter and problem_letter.isupper():
+        return get_contest_problem_id(problem_letter)
+
+    return None
 
 
 def guess_python_version(path):
