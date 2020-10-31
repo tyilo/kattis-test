@@ -264,7 +264,16 @@ def get_float_diff(s1, s2):
     return (absd, reld)
 
 
-def compare_outputs(output, expected_output, time_str):
+def print_diff(output, expected_output):
+    with NamedTemporaryFile(
+        "w", prefix="output.", suffix=".out"
+    ) as f1, NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2:
+        print(output, file=f1, flush=True)
+        print(expected_output, file=f2, flush=True)
+        run(["diff", "--color=always", "--unified", f1.name, f2.name])
+
+
+def compare_outputs(output, expected_output, time_str, diff):
     if output == expected_output:
         print(f"Success ({time_str})")
         return True
@@ -283,10 +292,15 @@ def compare_outputs(output, expected_output, time_str):
 
             return True
 
-    print(f"Wrong output ({time_str}), got:")
-    print(output)
-    print("Expected:")
-    print(expected_output)
+    if diff:
+        print(f"Wrong output ({time_str}), diff:")
+        print_diff(output, expected_output)
+    else:
+        print(f"Wrong output ({time_str}), got:")
+        print(output)
+        print("Expected:")
+        print(expected_output)
+
     return False
 
 
@@ -465,6 +479,9 @@ def main():
         const=Path("/dev/stdin"),
         help="just run program without checking sample inputs and outputs",
     )
+    parser.add_argument(
+        "--diff", dest="diff", action="store_true", help="show output diffs"
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
@@ -553,7 +570,7 @@ def main():
                 with open(sample.output) as f:
                     expected_output = normalize_output(f.read())
 
-                success = compare_outputs(output, expected_output, time_str)
+                success = compare_outputs(output, expected_output, time_str, args.diff)
                 all_correct &= success
             elif not args.show_output:
                 print(f"Output ({time_str}):")
