@@ -15,6 +15,7 @@ from subprocess import PIPE, Popen, check_call, run
 from tempfile import NamedTemporaryFile
 from time import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 from zipfile import ZipFile
 
 SAMPLE_CACHE_DIR = Path.home() / ".cache" / "kattis-test" / "samples"
@@ -106,15 +107,16 @@ def retrieve_url(url):
         headers={"user-agent": "kattis-test"},
     )
     with urlopen(req) as r:
-        return (r.getcode(), r.read())
+        return r.read()
 
 
 def download_samples(problem_id, sample_dir):
     # Kattis blocks the default Python-urllib/x.y user-agent
-    code, response = retrieve_url(
-        f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip"
-    )
-    if code != 200:
+    try:
+        response = retrieve_url(
+            f"https://open.kattis.com/problems/{problem_id}/file/statement/samples.zip"
+        )
+    except HTTPError:
         raise SamplesNotFoundException()
 
     with ZipFile(BytesIO(response)) as z:
@@ -288,8 +290,9 @@ def get_contest_problem_id(problem_letter):
         return None
 
     problems_url = submission_url.replace("/submit", "/problems")
-    code, response = retrieve_url(problems_url)
-    if code != 200:
+    try:
+        response = retrieve_url(problems_url)
+    except HTTPError:
         return None
 
     response = str(response, "utf-8")
