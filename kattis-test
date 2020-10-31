@@ -14,11 +14,14 @@ from signal import Signals
 from subprocess import PIPE, Popen, check_call, run
 from tempfile import NamedTemporaryFile
 from time import time
-from urllib.request import Request, urlopen
 from urllib.error import HTTPError
+from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
-SAMPLE_CACHE_DIR = Path.home() / ".cache" / "kattis-test" / "samples"
+CACHE_DIR = Path.home() / ".cache" / "kattis-test"
+SAMPLE_CACHE_DIR = CACHE_DIR / "samples"
+CONTEST_CACHE_DIR = CACHE_DIR / "contests"
 
 
 class SamplesNotFoundException(Exception):
@@ -280,29 +283,48 @@ def compare_outputs(output, expected_output, time_str):
     return False
 
 
-def get_contest_problem_id(problem_letter):
-    PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
-
+def get_problems_url():
     cfg = ConfigParser()
     cfg.read(Path.home() / ".kattisrc")
     submission_url = cfg.get("kattis", "submissionurl", fallback=None)
     if not submission_url:
         return None
+    return submission_url.replace("/submit", "/problems")
 
-    problems_url = submission_url.replace("/submit", "/problems")
+
+def get_contest_problem_id(problem_letter):
+    PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
+
+    problems_url = get_problems_url()
+    contest_dir = CONTEST_CACHE_DIR / quote_plus(problems_url)
+    problem_ids_path = contest_dir / "problem_ids.txt"
+
     try:
-        response = retrieve_url(problems_url)
-    except HTTPError:
-        return None
+        with problem_ids_path.open() as f:
+            problem_ids = f.read().strip().splitlines()
+    except FileNotFoundError:
+        try:
+            print("Downloading contest problems page...")
+            response = retrieve_url(problems_url)
+        except HTTPError:
+            return None
 
-    response = str(response, "utf-8")
-    problem_ids = []
-    for l in response.splitlines():
-        m = PROBLEM_ID_RE.search(l)
-        if not m:
-            continue
+        response = str(response, "utf-8")
 
-        problem_ids.append(m.group(1))
+        if 'class="problem_letter"' not in response:
+            return None
+
+        problem_ids = []
+        for l in response.splitlines():
+            m = PROBLEM_ID_RE.search(l)
+            if not m:
+                continue
+
+            problem_ids.append(m.group(1))
+
+        contest_dir.mkdir(parents=True, exist_ok=True)
+        with problem_ids_path.open("w") as f:
+            f.write("\n".join(problem_ids) + "\n")
 
     i = ord(problem_letter) - ord("A")
     if 0 <= i < len(problem_ids):
@@ -319,7 +341,10 @@ def guess_problem_id(path):
     problem_letter = path.stem[:1]
 
     if problem_letter and problem_letter.isupper():
-        return get_contest_problem_id(problem_letter)
+        problem_id = get_contest_problem_id(problem_letter)
+        if problem_id:
+            print(f"Using contest problem id: {problem_id}")
+        return problem_id
 
     return None
 
