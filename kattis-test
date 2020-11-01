@@ -265,14 +265,6 @@ def get_float_diff(s1, s2):
     return (absd, reld)
 
 
-RED_COLOR = 31
-GREEN_COLOR = 32
-
-
-def color(s, c):
-    return "\x1b[%sm%s\x1b[0m" % (c, s)
-
-
 def print_diff(output, expected_output):
     with NamedTemporaryFile(
         "w", prefix="output.", suffix=".out"
