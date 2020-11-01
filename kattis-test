@@ -305,17 +305,30 @@ def compare_outputs(output, expected_output, time_str, diff):
     return False
 
 
-def get_problems_url():
+def get_problems_url(contest_url):
+    paths = ["/standings", "/problems", "/help", "/submit"]
+
+    if contest_url:
+        for path in paths:
+            if contest_url.endswith(path):
+                contest_url = contest_url[:-len(path)]
+                break
+
+        if contest_url[-1] != "/":
+            contest_url += "/"
+
+        return contest_url + "problems"
+
     submission_url = KATTIS_CFG.get("kattis", "submissionurl", fallback=None)
     if not submission_url:
         return None
     return submission_url.replace("/submit", "/problems")
 
 
-def get_contest_problem_id(problem_letter):
+def get_contest_problem_id(problem_letter, contest_url):
     PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
 
-    problems_url = get_problems_url()
+    problems_url = get_problems_url(contest_url)
     contest_dir = CONTEST_CACHE_DIR / quote_plus(problems_url)
     problem_ids_path = contest_dir / "problem_ids.txt"
 
@@ -353,7 +366,7 @@ def get_contest_problem_id(problem_letter):
     return None
 
 
-def guess_problem_id(path):
+def guess_problem_id(path, contest_url):
     m = re.search(r"^[a-z0-9]+", path.stem)
     if m:
         return m.group()
@@ -361,7 +374,7 @@ def guess_problem_id(path):
     problem_letter = path.stem[:1]
 
     if problem_letter and problem_letter.isupper():
-        problem_id = get_contest_problem_id(problem_letter)
+        problem_id = get_contest_problem_id(problem_letter, contest_url)
         if problem_id:
             print(f"Using contest problem id: {problem_id}")
         return problem_id
@@ -483,11 +496,16 @@ def main():
     parser.add_argument(
         "--diff", dest="diff", action="store_true", help="show output diffs"
     )
+    parser.add_argument(
+        "--contest-url",
+        dest="contest_url",
+        help="specify contest url for mapping problem letters to problem ids",
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
 
-    problem_id = args.problem_id or guess_problem_id(args.file)
+    problem_id = args.problem_id or guess_problem_id(args.file, args.contest_url)
     if not problem_id:
         print("Couldn't guess problem id from filename", file=sys.stderr)
         return 1
