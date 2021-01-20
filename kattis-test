@@ -336,7 +336,7 @@ def get_problems_url(contest_url):
     if contest_url:
         for path in paths:
             if contest_url.endswith(path):
-                contest_url = contest_url[:-len(path)]
+                contest_url = contest_url[: -len(path)]
                 break
 
         if contest_url[-1] != "/":
