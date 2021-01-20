@@ -58,16 +58,20 @@ Sample = namedtuple("Sample", ["name", "input", "output"])
 CompilerInfo = namedtuple("CompilerInfo", ["compile", "run", "kattis"])
 
 
+def python_compiler(binary, version):
+    return CompilerInfo(
+        compile=[binary, "-m", "py_compile", InputFile()],
+        run=[binary, InputFile()],
+        kattis=f"Python {version}",
+    )
+
+
 COMPILERS = {
     "binary": CompilerInfo(compile=None, run=[InputFile()], kattis=None),
-    "python2": CompilerInfo(
-        compile=None, run=["python2", InputFile()], kattis="Python 2"
-    ),
-    "python3": CompilerInfo(
-        compile=None, run=["python3", InputFile()], kattis="Python 3"
-    ),
-    "pypy2": CompilerInfo(compile=None, run=["pypy", InputFile()], kattis="Python 2"),
-    "pypy3": CompilerInfo(compile=None, run=["pypy3", InputFile()], kattis="Python 3"),
+    "python2": python_compiler("python2", "2"),
+    "python3": python_compiler("python3", "3"),
+    "pypy2": python_compiler("pypy", "2"),
+    "pypy3": python_compiler("pypy3", "3"),
     "ocaml": CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
