@@ -159,6 +159,15 @@ def download_samples(problem_id, sample_dir):
         z.extractall(sample_dir)
 
 
+def print_stderr_line(l):
+    print(f"STDERR: {l}", end="")
+
+
+def print_stderr(stderr):
+    for l in stderr.splitlines(keepends=True):
+        print_stderr_line(l)
+
+
 class Compiler:
     STACK_LIMIT_CHANGED = False
 
@@ -212,11 +221,13 @@ class Compiler:
     @classmethod
     def _show_output(cls, p, fname):
         in_f = getattr(p, fname)
-        out_f = getattr(sys, fname)
         r = ""
         for l in iter(in_f.readline, ""):
             r += l
-            print(l, end="", file=out_f)
+            if fname == "stdout":
+                print(l, end="")
+            else:
+                print_stderr_line(l)
 
         return r
 
@@ -592,7 +603,9 @@ def main():
             time_str = f"{total_time:.2f}s"
 
             if stderr and not args.show_output:
-                print(stderr, file=sys.stderr)
+                if stderr:
+                    print()
+                print_stderr(stderr)
 
             if exit_code != 0:
                 if exit_code < 0:
