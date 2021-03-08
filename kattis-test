@@ -472,9 +472,7 @@ def dir_path(filename):
 
 def main():
     parser = ArgumentParser(description="Test program on kattis sample inputs")
-    parser.add_argument(
-        "-p", "--problem-id", dest="problem_id", help="set the problem id"
-    )
+
     sample_group = parser.add_mutually_exclusive_group()
     sample_group.add_argument(
         "--sample-file",
@@ -483,11 +481,22 @@ def main():
         help="use sample file instead of downloading from open kattis",
     )
     sample_group.add_argument(
+        "--run",
+        dest="sample_file",
+        action="store_const",
+        const=Path("/dev/stdin"),
+        help="just run program without checking sample inputs and outputs",
+    )
+    sample_group.add_argument(
         "-d",
         "--directory",
         dest="dir",
         type=dir_path,
         help="use samples from directory instead of downloading from open kattis",
+    )
+
+    parser.add_argument(
+        "-p", "--problem-id", dest="problem_id", help="set the problem id"
     )
     parser.add_argument(
         "-l",
@@ -535,19 +544,18 @@ def main():
         help="stop running on first failed sample",
     )
     parser.add_argument(
-        "--run",
-        dest="sample_file",
-        action="store_const",
-        const=Path("/dev/stdin"),
-        help="just run program without checking sample inputs and outputs",
-    )
-    parser.add_argument(
         "--diff", dest="diff", action="store_true", help="show output diffs"
     )
     parser.add_argument(
         "--contest-url",
         dest="contest_url",
         help="specify contest url for mapping problem letters to problem ids",
+    )
+    parser.add_argument(
+        "--sample-index",
+        dest="sample_index",
+        type=int,
+        help="only use sample with specific index (one-indexed)",
     )
     parser.add_argument("file", type=file_path)
 
@@ -596,6 +604,18 @@ def main():
                         sample_dir.rmdir()
 
         samples = get_samples(sample_dir)
+
+    if args.sample_index is not None:
+        samples = list(samples)
+
+        if not 1 <= args.sample_index <= len(samples):
+            print(
+                f"Sample with index {args.sample_index} not found, only {len(samples)} samples exists.",
+                file=sys.stderr,
+            )
+            return 1
+
+        samples = [samples[args.sample_index - 1]]
 
     all_correct = True
     with Compiler(args.file, compiler.compile, compiler.run, args.debug) as c:
