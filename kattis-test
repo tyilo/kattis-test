@@ -171,11 +171,12 @@ def print_stderr(stderr):
 class Compiler:
     STACK_LIMIT_CHANGED = False
 
-    def __init__(self, input_file, compile_cmd, run_cmd, debug):
+    def __init__(self, input_file, compile_cmd, run_cmd, debug, compile_flags):
         self.input_file = str(Path(input_file).absolute())
         self.compile_cmd = compile_cmd
         self.run_cmd = run_cmd
         self.debug = debug
+        self.compile_flags = compile_flags
 
     def __enter__(self):
         self.tempfiles = {}
@@ -210,7 +211,7 @@ class Compiler:
 
     def compile(self):
         if self.compile_cmd:
-            check_call(self.transform_cmd(self.compile_cmd))
+            check_call(self.transform_cmd(self.compile_cmd) + self.compile_flags)
 
     @classmethod
     def _ensure_stack_limit(cls):
@@ -557,6 +558,14 @@ def main():
         type=int,
         help="only use sample with specific index (one-indexed)",
     )
+    parser.add_argument(
+        "-D",
+        "--define",
+        dest="defines",
+        action="append",
+        default=[],
+        help="define a C++ macro",
+    )
     parser.add_argument("file", type=file_path)
 
     args = parser.parse_args()
@@ -617,8 +626,13 @@ def main():
 
         samples = [samples[args.sample_index - 1]]
 
+    compile_flags = []
+    compile_flags += [f"-D{d}" for d in args.defines]
+
     all_correct = True
-    with Compiler(args.file, compiler.compile, compiler.run, args.debug) as c:
+    with Compiler(
+        args.file, compiler.compile, compiler.run, args.debug, compile_flags
+    ) as c:
         print("Compiling...")
         c.compile()
 
