@@ -231,7 +231,7 @@ class Compiler:
 
         return r
 
-    def run(self, stdin_file, show_output):
+    def run(self, stdin_file, show_output, show_stderr):
         self._ensure_stack_limit()
         with open(stdin_file) as stdin:
             p = Popen(
@@ -245,12 +245,18 @@ class Compiler:
         if show_output:
             print("\nOutput:")
             with ThreadPoolExecutor() as executor:
-                ts = [
-                    executor.submit(self._show_output, p, k)
-                    for k in ["stdout", "stderr"]
-                ]
+                fnames = ["stdout"]
+                if show_stderr:
+                    fnames.append("stderr")
+
+                ts = [executor.submit(self._show_output, p, k) for k in fnames]
                 p.wait()
-                stdout, stderr = [f.result() for f in ts]
+
+                stdout = ts[0].result()
+                if show_stderr:
+                    stderr = ts[1].result()
+                else:
+                    stderr = ""
         else:
             stdout, stderr = p.communicate()
 
@@ -511,6 +517,12 @@ def main():
         help="show output of runs even when they succeed",
     )
     parser.add_argument(
+        "--no-stderr",
+        dest="no_stderr",
+        action="store_true",
+        help="don't show stderr output of program",
+    )
+    parser.add_argument(
         "--debug",
         dest="debug",
         action="store_true",
@@ -598,13 +610,14 @@ def main():
                 continue
 
             start_time = time()
-            exit_code, stdout, stderr = c.run(sample.input, args.show_output)
+            exit_code, stdout, stderr = c.run(
+                sample.input, args.show_output, show_stderr=not args.no_stderr
+            )
             total_time = time() - start_time
             time_str = f"{total_time:.2f}s"
 
-            if stderr and not args.show_output:
-                if stderr:
-                    print()
+            if stderr and not args.show_output and not args.no_stderr:
+                print()
                 print_stderr(stderr)
 
             if exit_code != 0:
