@@ -109,10 +109,55 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="C++",
     ),
+    "rust": CompilerInfo(
+        compile=[
+            "rustup",
+            "run",
+            "1.41.0",
+            "rustc",
+            "-O",
+            "--crate-type",
+            "bin",
+            "--edition=2018",
+            InputFile(),
+            "-o",
+            TempFile("binary"),
+        ],
+        run=[TempFile("binary")],
+        kattis="Rust",
+    ),
+    "php": CompilerInfo(
+        compile=None,
+        run=["php", InputFile()],
+        kattis="PHP",
+    ),
+    "prolog": CompilerInfo(
+        compile=[
+            "swipl",
+            "-o",
+            TempFile("binary"),
+            "-O",
+            "-q",
+            "-g",
+            "main",
+            "-t",
+            "halt",
+            "-c",
+            InputFile(),
+        ],
+        run=[TempFile("binary")],
+        kattis="Prolog",
+    ),
 }
 
 
-DEFAULT_COMPILERS = {".cpp": "c++", ".ml": "ocaml"}
+DEFAULT_COMPILERS = {
+    ".cpp": "c++",
+    ".ml": "ocaml",
+    ".rs": "rust",
+    ".php": "php",
+    ".pl": "prolog",
+}
 
 
 def get_sample_dir(problem_id):
