@@ -132,6 +132,8 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="OCaml",
     ),
+    # If we really want to consistency then we could consider using:
+    # $ docker run -it --rm -v $PWD/input.cpp:/input.cpp -v $PWD/output:/output gcc:11.2.0 g++ ... /input.cpp -o /output/output
     "c++": lambda: CompilerInfo(
         compile=[
             "g++",
