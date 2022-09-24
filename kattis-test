@@ -8,11 +8,10 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from configparser import ConfigParser
 from io import BytesIO
-from itertools import zip_longest
 from math import isnan
 from pathlib import Path
 from signal import Signals
-from subprocess import PIPE, Popen, check_call, run
+from subprocess import PIPE, CalledProcessError, Popen, check_call, check_output, run
 from tempfile import NamedTemporaryFile
 from time import time
 from urllib.error import HTTPError
@@ -58,28 +57,55 @@ Sample = namedtuple("Sample", ["name", "input", "output"])
 CompilerInfo = namedtuple("CompilerInfo", ["compile", "run", "kattis"])
 
 
-def python_compiler(binary, version):
+def asdf_find(plugin, asdf_version):
+    try:
+        return check_output(
+            ["asdf", "where", plugin, asdf_version], encoding="utf-8"
+        ).strip()
+    except CalledProcessError:
+        return None
+
+
+def python_compiler(binary_name, version, asdf_version=None):
+    path = None
+    if asdf_version is not None:
+        asdf_path = asdf_find("python", asdf_version)
+        if asdf_path is not None:
+            path = asdf_path + "/bin/python"
+
+        if path is None:
+            print(
+                f"WARNING: asdf plugin python {asdf_version} not found.",
+                file=sys.stderr,
+            )
+            print(
+                f"  The python version used might differ from kattis'.", file=sys.stderr
+            )
+
+    if path is None:
+        path = binary_name
+
     return CompilerInfo(
-        compile=[binary, "-m", "py_compile", InputFile()],
-        run=[binary, InputFile()],
+        compile=[path, "-m", "py_compile", InputFile()],
+        run=[path, InputFile()],
         kattis=f"Python {version}",
     )
 
 
 COMPILERS = {
-    "binary": CompilerInfo(compile=None, run=[InputFile()], kattis=None),
-    "python2": python_compiler("python2", "2"),
-    "python3": python_compiler("python3", "3"),
-    "pypy2": python_compiler("pypy", "2"),
-    "pypy3": python_compiler("pypy3", "3"),
-    "ocaml": CompilerInfo(
+    "binary": lambda: CompilerInfo(compile=None, run=[InputFile()], kattis=None),
+    "python2": lambda: python_compiler("python2", "2"),
+    "python3": lambda: python_compiler("python3", "3"),
+    "pypy2": lambda: python_compiler("pypy", "2", "pypy2.7-7.3.8"),
+    "pypy3": lambda: python_compiler("pypy3", "3", "pypy3.8-7.3.9"),
+    "ocaml": lambda: CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
         kattis="OCaml",
     ),
     # Invokes OCaml's optimizing native code compiler instead of bytecode interpreter.
     # It produces intermediate .cmi, .cmx and .o files, which is annoying.
-    "ocamlopt": CompilerInfo(
+    "ocamlopt": lambda: CompilerInfo(
         compile=[
             "ocamlopt",
             "-g",
@@ -93,7 +119,7 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="OCaml",
     ),
-    "c++": CompilerInfo(
+    "c++": lambda: CompilerInfo(
         compile=[
             "g++",
             "-Wall",
@@ -109,7 +135,7 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="C++",
     ),
-    "rust": CompilerInfo(
+    "rust": lambda: CompilerInfo(
         compile=[
             "rustup",
             "run",
@@ -126,12 +152,12 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="Rust",
     ),
-    "php": CompilerInfo(
+    "php": lambda: CompilerInfo(
         compile=None,
         run=["php", InputFile()],
         kattis="PHP",
     ),
-    "prolog": CompilerInfo(
+    "prolog": lambda: CompilerInfo(
         compile=[
             "swipl",
             "-o",
@@ -626,7 +652,7 @@ def main():
         print(f"I don't know how to compile/run {args.file}", file=sys.stderr)
         return 1
 
-    compiler = COMPILERS[language]
+    compiler = COMPILERS[language]()
 
     if args.sample_file:
         samples = [Sample(args.sample_file.name, args.sample_file, None)]
