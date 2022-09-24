@@ -4,9 +4,10 @@ import re
 import resource
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
-from collections import namedtuple
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from configparser import ConfigParser
+from dataclasses import dataclass
 from io import BytesIO
 from math import isnan
 from pathlib import Path
@@ -14,6 +15,7 @@ from signal import Signals
 from subprocess import PIPE, CalledProcessError, Popen, check_call, check_output, run
 from tempfile import NamedTemporaryFile
 from time import time
+from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
@@ -31,47 +33,58 @@ class SamplesNotFoundException(Exception):
     pass
 
 
+@dataclass
 class InputFile:
-    def __eq__(self, other):
-        return isinstance(other, self.__class__)
+    pass
 
 
+@dataclass
 class TempFile:
-    def __init__(self, name):
-        self.name = name
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.name == other.name
-        else:
-            return False
+    name: str
 
 
+@dataclass
 class DebugArg:
-    def __init__(self, arg, enable_on_debug=True):
-        self.arg = arg
-        self.enable_on_debug = enable_on_debug
+    arg: str
+    enable_on_debug: bool = True
 
 
-Sample = namedtuple("Sample", ["name", "input", "output"])
-CompilerInfo = namedtuple("CompilerInfo", ["compile", "run", "kattis"])
+@dataclass
+class Sample:
+    name: str
+    input: Path
+    output: Path | None
 
 
-def asdf_find(plugin, asdf_version):
+Arg = str | InputFile | TempFile | DebugArg
+
+
+@dataclass
+class CompilerInfo:
+    compile: list[Arg] | None
+    run: list[Arg]
+    kattis: str | None
+
+
+def asdf_find(plugin: str, asdf_version: str) -> Path | None:
     try:
-        return check_output(
-            ["asdf", "where", plugin, asdf_version], encoding="utf-8"
-        ).strip()
+        return Path(
+            check_output(
+                ["asdf", "where", plugin, asdf_version], encoding="utf-8"
+            ).strip()
+        )
     except CalledProcessError:
         return None
 
 
-def python_compiler(binary_name, version, asdf_version=None):
+def python_compiler(
+    binary_name: str, version: str, asdf_version: str | None = None
+) -> CompilerInfo:
     path = None
     if asdf_version is not None:
         asdf_path = asdf_find("python", asdf_version)
         if asdf_path is not None:
-            path = asdf_path + "/bin/python"
+            path = asdf_path / "bin" / "python"
 
         if path is None:
             print(
@@ -86,8 +99,8 @@ def python_compiler(binary_name, version, asdf_version=None):
         path = binary_name
 
     return CompilerInfo(
-        compile=[path, "-m", "py_compile", InputFile()],
-        run=[path, InputFile()],
+        compile=[str(path), "-m", "py_compile", InputFile()],
+        run=[str(path), InputFile()],
         kattis=f"Python {version}",
     )
 
@@ -186,12 +199,12 @@ DEFAULT_COMPILERS = {
 }
 
 
-def get_sample_dir(problem_id):
+def get_sample_dir(problem_id: str) -> Path:
     return SAMPLE_CACHE_DIR / problem_id
 
 
-def get_samples(sample_dir):
-    for in_p in sorted(Path(sample_dir).glob("*.in*")):
+def get_samples(sample_dir: Path) -> Iterator[Sample]:
+    for in_p in sorted(sample_dir.glob("*.in*")):
         index, description = in_p.name.split(".in", maxsplit=1)
         if description == "" or description[0] == ".":
             out_p = in_p.parent / in_p.name.replace(".in", ".ans", 1)
@@ -203,7 +216,7 @@ def get_samples(sample_dir):
             yield Sample(index, in_p, out_p)
 
 
-def retrieve_url(url):
+def retrieve_url(url: str) -> bytes:
     # Kattis blocks the default Python-urllib/x.y user-agent
     req = Request(
         url,
@@ -213,13 +226,12 @@ def retrieve_url(url):
         return r.read()
 
 
-def get_samples_url(problem_id):
+def get_samples_url(problem_id: str) -> str:
     hostname = KATTIS_CFG.get("kattis", "hostname", fallback="open.kattis.com")
     return f"https://{hostname}/problems/{problem_id}/file/statement/samples.zip"
 
 
-def download_samples(problem_id, sample_dir):
-    # Kattis blocks the default Python-urllib/x.y user-agent
+def download_samples(problem_id: str, sample_dir: Path) -> None:
     url = get_samples_url(problem_id)
     try:
         response = retrieve_url(url)
@@ -230,26 +242,40 @@ def download_samples(problem_id, sample_dir):
         z.extractall(sample_dir)
 
 
-def print_stderr_line(l):
+def print_stderr_line(l: str) -> None:
     print(f"STDERR: {l}", end="")
 
 
-def print_stderr(stderr):
+def print_stderr(stderr: str) -> None:
     for l in stderr.splitlines(keepends=True):
         print_stderr_line(l)
+
+
+@dataclass
+class RunResult:
+    exit_code: int
+    stdout: str
+    stderr: str
 
 
 class Compiler:
     STACK_LIMIT_CHANGED = False
 
-    def __init__(self, input_file, compile_cmd, run_cmd, debug, compile_flags):
+    def __init__(
+        self,
+        input_file: str,
+        compile_cmd: list[Arg] | None,
+        run_cmd: list[Arg],
+        debug: bool,
+        compile_flags: list[str],
+    ) -> None:
         self.input_file = str(Path(input_file).absolute())
         self.compile_cmd = compile_cmd
         self.run_cmd = run_cmd
         self.debug = debug
         self.compile_flags = compile_flags
 
-    def __enter__(self):
+    def __enter__(self) -> "Compiler":
         self.tempfiles = {}
         for arg in (self.compile_cmd or []) + self.run_cmd:
             if isinstance(arg, TempFile):
@@ -258,11 +284,11 @@ class Compiler:
 
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         for fname in self.tempfiles.values():
             os.remove(fname)
 
-    def transform_arg(self, arg):
+    def transform_arg(self, arg: Arg) -> list[str]:
         if isinstance(arg, DebugArg):
             if self.debug == arg.enable_on_debug:
                 return self.transform_arg(arg.arg)
@@ -277,21 +303,21 @@ class Compiler:
 
         return [arg]
 
-    def transform_cmd(self, cmd):
+    def transform_cmd(self, cmd: list[Arg]) -> list[str]:
         return sum((self.transform_arg(arg) for arg in cmd), [])
 
-    def compile(self):
+    def compile(self) -> None:
         if self.compile_cmd:
             check_call(self.transform_cmd(self.compile_cmd) + self.compile_flags)
 
     @classmethod
-    def _ensure_stack_limit(cls):
+    def _ensure_stack_limit(cls) -> None:
         if not cls.STACK_LIMIT_CHANGED:
             resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY,) * 2)
             cls.STACK_LIMIT_CHANGED = True
 
     @classmethod
-    def _show_output(cls, p, fname):
+    def _show_output(cls, p, fname) -> str:
         in_f = getattr(p, fname)
         r = ""
         for l in iter(in_f.readline, ""):
@@ -303,7 +329,7 @@ class Compiler:
 
         return r
 
-    def run(self, stdin_file, show_output, show_stderr):
+    def run(self, stdin_file: Path, show_output: bool, show_stderr: bool) -> RunResult:
         self._ensure_stack_limit()
         with open(stdin_file) as stdin:
             p = Popen(
@@ -332,14 +358,14 @@ class Compiler:
         else:
             stdout, stderr = p.communicate()
 
-        return (p.returncode, stdout, stderr)
+        return RunResult(exit_code=p.returncode, stdout=stdout, stderr=stderr)
 
 
-def normalize_output(s):
+def normalize_output(s: str) -> str:
     return "\n".join([l.strip() for l in s.strip().split("\n")])
 
 
-def get_float_diff(s1, s2):
+def get_float_diff(s1: str, s2: str) -> tuple[float, float] | None:
     reld = 0
     absd = 0
 
@@ -379,7 +405,7 @@ def get_float_diff(s1, s2):
     return (absd, reld)
 
 
-def print_diff(output, expected_output):
+def print_diff(output: str, expected_output: str) -> None:
     with NamedTemporaryFile(
         "w", prefix="output.", suffix=".out"
     ) as f1, NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2:
@@ -388,7 +414,9 @@ def print_diff(output, expected_output):
         run(["diff", "--color=always", "--side-by-side", f1.name, f2.name])
 
 
-def compare_outputs(output, expected_output, time_str, diff):
+def compare_outputs(
+    output: str, expected_output: str, time_str: str, diff: bool
+) -> bool:
     if output == expected_output:
         print(f"Success ({time_str})")
         return True
@@ -419,7 +447,7 @@ def compare_outputs(output, expected_output, time_str, diff):
     return False
 
 
-def get_problems_url(contest_url):
+def get_problems_url(contest_url: str) -> str | None:
     paths = ["/standings", "/problems", "/help", "/submit"]
 
     if contest_url:
@@ -439,10 +467,13 @@ def get_problems_url(contest_url):
     return submission_url.replace("/submit", "/problems")
 
 
-def get_contest_problem_id(problem_letter, contest_url):
+def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
     PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
 
     problems_url = get_problems_url(contest_url)
+    if problems_url is None:
+        return None
+
     contest_dir = CONTEST_CACHE_DIR / quote_plus(problems_url)
     problem_ids_path = contest_dir / "problem_ids.txt"
 
@@ -480,7 +511,7 @@ def get_contest_problem_id(problem_letter, contest_url):
     return None
 
 
-def guess_problem_id(path, contest_url):
+def guess_problem_id(path: Path, contest_url: str) -> str | None:
     m = re.search(r"^[a-z0-9]+", path.stem)
     if m:
         return m.group()
@@ -496,7 +527,7 @@ def guess_problem_id(path, contest_url):
     return None
 
 
-def guess_python_version(path):
+def guess_python_version(path: Path) -> int:
     python2_re = re.compile(r"^\s*\bprint\b *[^ \(\),\]]|\braw_input\b|\bxrange\b")
 
     first = True
@@ -514,7 +545,7 @@ def guess_python_version(path):
     return 3
 
 
-def guess_language(path):
+def guess_language(path: Path) -> str | None:
     ext = path.suffix
     if ext == ".py":
         return "pypy" + str(guess_python_version(path))
@@ -526,7 +557,7 @@ def guess_language(path):
     return None
 
 
-def file_path(filename):
+def file_path(filename: str) -> Path:
     if filename == "-":
         return Path("/dev/stdin")
     path = Path(filename)
@@ -535,14 +566,14 @@ def file_path(filename):
     return path
 
 
-def dir_path(filename):
+def dir_path(filename: str) -> Path:
     path = Path(filename)
     if not path.is_dir():
         raise ArgumentTypeError(f"{filename} is not a directory")
     return path
 
 
-def main():
+def main() -> int:
     parser = ArgumentParser(description="Test program on kattis sample inputs")
 
     sample_group = parser.add_mutually_exclusive_group()
@@ -669,7 +700,7 @@ def main():
                     print("Retrieving samples...")
                     download_samples(problem_id, sample_dir)
                     got_exception = False
-                except SamplesNotFoundException as e:
+                except SamplesNotFoundException:
                     print(
                         f"Could not find samples for problem {problem_id} on kattis",
                         file=sys.stderr,
@@ -715,19 +746,19 @@ def main():
                 continue
 
             start_time = time()
-            exit_code, stdout, stderr = c.run(
+            result = c.run(
                 sample.input, args.show_output, show_stderr=not args.no_stderr
             )
             total_time = time() - start_time
             time_str = f"{total_time:.2f}s"
 
-            if stderr and not args.show_output and not args.no_stderr:
+            if result.stderr and not args.show_output and not args.no_stderr:
                 print()
-                print_stderr(stderr)
+                print_stderr(result.stderr)
 
-            if exit_code != 0:
-                if exit_code < 0:
-                    s = -exit_code
+            if result.exit_code != 0:
+                if result.exit_code < 0:
+                    s = -result.exit_code
                     try:
                         name = Signals(s).name
                     except ValueError:
@@ -735,13 +766,13 @@ def main():
 
                     print(f"Program exited with signal {s} ({name}) ({time_str})")
                 else:
-                    print(f"Program exited with code {exit_code} ({time_str})")
+                    print(f"Program exited with code {result.exit_code} ({time_str})")
 
                 all_correct = False
                 continue
 
             if sample.output:
-                output = normalize_output(stdout)
+                output = normalize_output(result.stdout)
                 with open(sample.output) as f:
                     expected_output = normalize_output(f.read())
 
@@ -749,7 +780,7 @@ def main():
                 all_correct &= success
             elif not args.show_output:
                 print(f"Output ({time_str}):")
-                print(stdout)
+                print(result.stdout)
             else:
                 print()
                 print(f"Time: {time_str}")
@@ -777,6 +808,8 @@ def main():
                 input=b"y\n",
             )
             return p.returncode
+
+    return 0
 
 
 if __name__ == "__main__":
