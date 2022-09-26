@@ -73,7 +73,7 @@ def asdf_find(plugin: str, asdf_version: str) -> Path | None:
                 ["asdf", "where", plugin, asdf_version], encoding="utf-8"
             ).strip()
         )
-    except CalledProcessError:
+    except (CalledProcessError, FileNotFoundError):
         return None
 
 
