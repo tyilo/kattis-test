@@ -512,7 +512,7 @@ def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
 
         response = str(response, "utf-8")
 
-        if 'class="problem_letter"' not in response:
+        if "<th>A</th>" not in response:
             return None
 
         problem_ids = []
