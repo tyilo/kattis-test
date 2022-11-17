@@ -132,9 +132,26 @@ COMPILERS = {
         run=[TempFile("binary")],
         kattis="OCaml",
     ),
+    "gcc": lambda: CompilerInfo(
+        compile=[
+            "gcc",
+            "-Wall",
+            "-g",
+            "-O2",
+            "-std=gnu11",
+            DebugArg("-static", False),
+            DebugArg("-fsanitize=undefined,address"),
+            "-lm",
+            InputFile(),
+            "-o",
+            TempFile("binary"),
+        ],
+        run=[TempFile("binary")],
+        kattis="C",
+    ),
     # If we really want to consistency then we could consider using:
     # $ docker run -it --rm -v $PWD/input.cpp:/input.cpp -v $PWD/output:/output gcc:11.2.0 g++ ... /input.cpp -o /output/output
-    "c++": lambda: CompilerInfo(
+    "g++": lambda: CompilerInfo(
         compile=[
             "g++",
             "-Wall",
@@ -214,7 +231,8 @@ COMPILERS = {
 
 
 DEFAULT_COMPILERS = {
-    ".cpp": "c++",
+    ".c": "gcc",
+    ".cpp": "g++",
     ".ml": "ocaml",
     ".rs": "rust",
     ".php": "php",
