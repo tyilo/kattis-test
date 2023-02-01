@@ -188,7 +188,7 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.59.0",
+            "1.61.0",
             "rustc",
             "-O",
             "--crate-type",
