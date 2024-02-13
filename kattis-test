@@ -72,17 +72,19 @@ class CompilerInfo:
     compile: list[Arg] | None
     run: list[Arg]
     kattis: str | None
+    mise_tool: str | None = None
 
 
-def mise_find(tool: str, mise_version: str) -> Path | None:
+def mise_bin_path(mise_tool: str) -> Path | None:
     try:
-        return Path(
+        path = Path(
             check_output(
-                ["mise", "which", tool, "--tool", f"{tool}@{mise_version}"],
+                ["mise", "where", mise_tool],
                 encoding="utf-8",
                 stderr=DEVNULL,
             ).strip()
         )
+        return path / "bin"
     except (CalledProcessError, FileNotFoundError):
         pass
 
@@ -90,41 +92,30 @@ def mise_find(tool: str, mise_version: str) -> Path | None:
 
 
 def python_compiler(
-    binary_name: str, version: str, mise_version: str | None = None
+    binary_name: str, version: str, mise_tool: str | None = None
 ) -> CompilerInfo:
-    path = None
-    if mise_version is not None:
-        path = mise_find("python", mise_version)
-
-        if path is None:
-            print(
-                f"WARNING: mise plugin python@{mise_version} not found.",
-                file=sys.stderr,
-            )
-            print(
-                f"  The python version used might differ from kattis'.", file=sys.stderr
-            )
-
-    if path is None:
-        path = binary_name
-
     return CompilerInfo(
-        compile=[str(path), "-m", "py_compile", InputFile()],
-        run=[str(path), InputFile()],
+        compile=[binary_name, "-m", "py_compile", InputFile()],
+        run=[binary_name, InputFile()],
         kattis=f"Python {version}",
+        mise_tool=mise_tool,
     )
+
+
+OCAML_TOOL = "ocaml@4.13.1"
 
 
 COMPILERS = {
     "binary": lambda: CompilerInfo(compile=None, run=[InputFile()], kattis=None),
     "python2": lambda: python_compiler("python2", "2"),
     "python3": lambda: python_compiler("python3", "3"),
-    "pypy2": lambda: python_compiler("pypy", "2", "pypy2.7-7.3.9"),
-    "pypy3": lambda: python_compiler("pypy3", "3", "pypy3.8-7.3.9"),
+    "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.9"),
+    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.8-7.3.9"),
     "ocaml": lambda: CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
         kattis="OCaml",
+        mise_tool=OCAML_TOOL,
     ),
     # Invokes OCaml's optimizing native code compiler instead of bytecode interpreter.
     # It produces intermediate .cmi, .cmx and .o files, which is annoying.
@@ -141,6 +132,7 @@ COMPILERS = {
         ],
         run=[TempFile("binary")],
         kattis="OCaml",
+        mise_tool=OCAML_TOOL,
     ),
     "gcc": lambda: CompilerInfo(
         compile=[
@@ -185,7 +177,7 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.61.0",
+            "1.72.1",
             "rustc",
             "-O",
             "--crate-type",
@@ -219,6 +211,7 @@ COMPILERS = {
             InputFile(),
         ],
         kattis="PHP",
+        mise_tool="php@8.1.2",
     ),
     "prolog": lambda: CompilerInfo(
         compile=[
@@ -236,6 +229,7 @@ COMPILERS = {
         ],
         run=[TempFile("binary")],
         kattis="Prolog",
+        mise_tool="swiprolog@8.4.2",
     ),
 }
 
@@ -317,6 +311,7 @@ class Compiler:
         input_file: str,
         compile_cmd: list[Arg] | None,
         run_cmd: list[Arg],
+        mise_tool: str | None,
         debug: bool,
         compile_flags: list[str],
     ) -> None:
@@ -325,6 +320,19 @@ class Compiler:
         self.run_cmd = run_cmd
         self.debug = debug
         self.compile_flags = compile_flags
+
+        self.bin_path = None
+        if mise_tool is not None:
+            self.bin_path = mise_bin_path(mise_tool)
+            if self.bin_path is None:
+                print(
+                    f"WARNING: mise plugin {mise_tool} not found.",
+                    file=sys.stderr,
+                )
+                print(
+                    f"  The compiler version used might differ from kattis'.",
+                    file=sys.stderr,
+                )
 
     def __enter__(self) -> "Compiler":
         self.tempfiles = {}
@@ -354,8 +362,15 @@ class Compiler:
 
         return [arg]
 
+    def binary_path(self, binary: str) -> Path:
+        if self.bin_path is None:
+            return Path(binary)
+
+        return self.bin_path / binary
+
     def transform_cmd(self, cmd: list[Arg]) -> list[str]:
-        return sum((self.transform_arg(arg) for arg in cmd), [])
+        binary, *args = sum((self.transform_arg(arg) for arg in cmd), [])
+        return [str(self.binary_path(binary))] + args
 
     def compile(self) -> None:
         if self.compile_cmd:
@@ -784,7 +799,12 @@ def main() -> int:
 
     all_correct = True
     with Compiler(
-        args.file, compiler.compile, compiler.run, args.debug, compile_flags
+        args.file,
+        compiler.compile,
+        compiler.run,
+        compiler.mise_tool,
+        args.debug,
+        compile_flags,
     ) as c:
         print("Compiling...")
         c.compile()
