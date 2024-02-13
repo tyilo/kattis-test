@@ -37,7 +37,7 @@ KATTIS_CFG = ConfigParser()
 KATTIS_CFG.read(Path.home() / ".kattisrc")
 
 
-class SamplesNotFoundException(Exception):
+class SamplesNotFoundError(Exception):
     pass
 
 
@@ -281,19 +281,19 @@ def download_samples(problem_id: str, sample_dir: Path) -> None:
     try:
         response = retrieve_url(url)
     except HTTPError:
-        raise SamplesNotFoundException()
+        raise SamplesNotFoundError()
 
     with ZipFile(BytesIO(response)) as z:
         z.extractall(sample_dir)
 
 
-def print_stderr_line(l: str) -> None:
-    print(f"STDERR: {l}", end="")
+def print_stderr_line(line: str) -> None:
+    print(f"STDERR: {line}", end="")
 
 
 def print_stderr(stderr: str) -> None:
-    for l in stderr.splitlines(keepends=True):
-        print_stderr_line(l)
+    for line in stderr.splitlines(keepends=True):
+        print_stderr_line(line)
 
 
 @dataclass
@@ -330,7 +330,7 @@ class Compiler:
                     file=sys.stderr,
                 )
                 print(
-                    f"  The compiler version used might differ from kattis'.",
+                    "  The compiler version used might differ from kattis'.",
                     file=sys.stderr,
                 )
 
@@ -338,7 +338,7 @@ class Compiler:
         self.tempfiles = {}
         for arg in (self.compile_cmd or []) + self.run_cmd:
             if isinstance(arg, TempFile):
-                if not arg.name in self.tempfiles:
+                if arg.name not in self.tempfiles:
                     self.tempfiles[arg.name] = NamedTemporaryFile(delete=False).name
 
         return self
@@ -369,8 +369,8 @@ class Compiler:
         return self.bin_path / binary
 
     def transform_cmd(self, cmd: list[Arg]) -> list[str]:
-        binary, *args = sum((self.transform_arg(arg) for arg in cmd), [])
-        return [str(self.binary_path(binary))] + args
+        binary, *args = (a for arg in cmd for a in self.transform_arg(arg))
+        return [str(self.binary_path(binary)), *args]
 
     def compile(self) -> None:
         if self.compile_cmd:
@@ -386,12 +386,12 @@ class Compiler:
     def _show_output(cls, p, fname) -> str:
         in_f = getattr(p, fname)
         r = ""
-        for l in iter(in_f.readline, ""):
-            r += l
+        for line in iter(in_f.readline, ""):
+            r += line
             if fname == "stdout":
-                print(l, end="")
+                print(line, end="")
             else:
-                print_stderr_line(l)
+                print_stderr_line(line)
 
         return r
 
@@ -428,7 +428,7 @@ class Compiler:
 
 
 def normalize_output(s: str) -> str:
-    return "\n".join([l.strip() for l in s.strip().split("\n")])
+    return "\n".join([line.strip() for line in s.strip().split("\n")])
 
 
 def get_float_diff(s1: str, s2: str) -> tuple[float, float] | None:
@@ -496,9 +496,9 @@ def compare_outputs(
                 print(f"Ok with no float error ({time_str})")
             else:
                 print(f"Ok with float error ({time_str}):")
-                print("  {:e} absolute".format(absd))
-                print("  {:e} relative".format(reld))
-                print("  {:e} min".format(min(absd, reld)))
+                print(f"  {absd:e} absolute")
+                print(f"  {reld:e} relative")
+                print(f"  {min(absd, reld):e} min")
 
             return True
 
@@ -534,9 +534,10 @@ def get_problems_url(contest_url: str) -> str | None:
     return submission_url.replace("/submit", "/problems")
 
 
-def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
-    PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
+PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
 
+
+def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
     problems_url = get_problems_url(contest_url)
     if problems_url is None:
         return None
@@ -560,8 +561,8 @@ def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
             return None
 
         problem_ids = []
-        for l in response.splitlines():
-            m = PROBLEM_ID_RE.search(l)
+        for line in response.splitlines():
+            m = PROBLEM_ID_RE.search(line)
             if not m:
                 continue
 
@@ -599,14 +600,14 @@ def guess_python_version(path: Path) -> int:
 
     first = True
     with path.open() as f:
-        for l in f:
-            if first and l.startswith("#!"):
-                if l.find("python2") != -1:
+        for line in f:
+            if first and line.startswith("#!"):
+                if line.find("python2") != -1:
                     return 2
-                if l.find("python3") != -1:
+                if line.find("python3") != -1:
                     return 3
 
-            if python2_re.search(l):
+            if python2_re.search(line):
                 return 2
 
     return 3
@@ -767,7 +768,7 @@ def main() -> int:
                     print("Retrieving samples...")
                     download_samples(problem_id, sample_dir)
                     got_exception = False
-                except SamplesNotFoundException:
+                except SamplesNotFoundError:
                     print(
                         f"Could not find samples for problem {problem_id} on kattis",
                         file=sys.stderr,
