@@ -472,9 +472,10 @@ def get_float_diff(s1: str, s2: str) -> tuple[float, float] | None:
 
 
 def print_diff(output: str, expected_output: str) -> None:
-    with NamedTemporaryFile(
-        "w", prefix="output.", suffix=".out"
-    ) as f1, NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2:
+    with (
+        NamedTemporaryFile("w", prefix="output.", suffix=".out") as f1,
+        NamedTemporaryFile("w", prefix="expected.", suffix=".out") as f2,
+    ):
         print(output, file=f1, flush=True)
         print(expected_output, file=f2, flush=True)
         run(["diff", "--color=always", "--side-by-side", f1.name, f2.name])
