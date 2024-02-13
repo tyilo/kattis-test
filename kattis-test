@@ -74,34 +74,31 @@ class CompilerInfo:
     kattis: str | None
 
 
-def asdf_find(plugin: str, asdf_version: str) -> Path | None:
-    for asdf_cmd in ["rtx", "asdf"]:
-        try:
-            return Path(
-                check_output(
-                    [asdf_cmd, "where", plugin, asdf_version],
-                    encoding="utf-8",
-                    stderr=DEVNULL,
-                ).strip()
-            )
-        except (CalledProcessError, FileNotFoundError):
-            pass
+def mise_find(tool: str, mise_version: str) -> Path | None:
+    try:
+        return Path(
+            check_output(
+                ["mise", "which", tool, "--tool", f"{tool}@{mise_version}"],
+                encoding="utf-8",
+                stderr=DEVNULL,
+            ).strip()
+        )
+    except (CalledProcessError, FileNotFoundError):
+        pass
 
     return None
 
 
 def python_compiler(
-    binary_name: str, version: str, asdf_version: str | None = None
+    binary_name: str, version: str, mise_version: str | None = None
 ) -> CompilerInfo:
     path = None
-    if asdf_version is not None:
-        asdf_path = asdf_find("python", asdf_version)
-        if asdf_path is not None:
-            path = asdf_path / "bin" / "python"
+    if mise_version is not None:
+        path = mise_find("python", mise_version)
 
         if path is None:
             print(
-                f"WARNING: rtx/asdf plugin python {asdf_version} not found.",
+                f"WARNING: mise plugin python@{mise_version} not found.",
                 file=sys.stderr,
             )
             print(
