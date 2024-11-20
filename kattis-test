@@ -213,6 +213,19 @@ COMPILERS = {
         kattis="PHP",
         mise_tool="php@8.1.2",
     ),
+    "perl": lambda: CompilerInfo(
+        compile=[
+            "perl",
+            "-c",
+            InputFile()
+        ],
+        run=[
+            "perl",
+            InputFile(),
+        ],
+        kattis="Perl",
+        mise_tool="perl@5.38.2",
+    ),
     "prolog": lambda: CompilerInfo(
         compile=[
             "swipl",
