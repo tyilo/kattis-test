@@ -102,15 +102,15 @@ def python_compiler(
     )
 
 
-OCAML_TOOL = "ocaml@4.13.1"
+OCAML_TOOL = "ocaml@4.14.1"
 
 
 COMPILERS = {
     "binary": lambda: CompilerInfo(compile=None, run=[InputFile()], kattis=None),
     "python2": lambda: python_compiler("python2", "2"),
     "python3": lambda: python_compiler("python3", "3"),
-    "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.9"),
-    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.8-7.3.9"),
+    "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.16"),
+    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.10-7.3.16"),
     "ocaml": lambda: CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
@@ -140,7 +140,7 @@ COMPILERS = {
             "-Wall",
             "-g",
             "-O2",
-            "-std=gnu11",
+            "-std=gnu23",
             DebugArg("-static", False),
             DebugArg("-fsanitize=undefined,address"),
             "-lm",
@@ -152,14 +152,14 @@ COMPILERS = {
         kattis="C",
     ),
     # If we really want to consistency then we could consider using:
-    # $ docker run -it --rm -v $PWD/input.cpp:/input.cpp -v $PWD/output:/output gcc:11.2.0 g++ ... /input.cpp -o /output/output
+    # $ docker run -it --rm -v $PWD/input.cpp:/input.cpp -v $PWD/output:/output gcc:14.2.0 g++ ... /input.cpp -o /output/output
     "g++": lambda: CompilerInfo(
         compile=[
             "g++",
             "-Wall",
             "-g",
             "-O2",
-            "-std=gnu++17",
+            "-std=gnu++23",
             DebugArg("-static", False),
             DebugArg("-lrt", False),
             DebugArg("-Wl,--whole-archive", False),
@@ -177,12 +177,15 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.72.1",
+            "1.83.0",
             "rustc",
-            "-O",
+            "-C",
+            "opt-level=3",
+            "-C",
+            "target-cpu=native",
             "--crate-type",
             "bin",
-            "--edition=2018",
+            "--edition=2021",
             InputFile(),
             "-o",
             TempFile("binary"),
@@ -211,14 +214,10 @@ COMPILERS = {
             InputFile(),
         ],
         kattis="PHP",
-        mise_tool="php@8.1.2",
+        mise_tool="php@8.3.6",
     ),
     "perl": lambda: CompilerInfo(
-        compile=[
-            "perl",
-            "-c",
-            InputFile()
-        ],
+        compile=["perl", "-c", InputFile()],
         run=[
             "perl",
             InputFile(),
@@ -229,20 +228,20 @@ COMPILERS = {
     "prolog": lambda: CompilerInfo(
         compile=[
             "swipl",
-            "-o",
-            TempFile("binary"),
             "-O",
             "-q",
             "-g",
             "main",
             "-t",
             "halt",
+            "-o",
+            TempFile("binary"),
             "-c",
             InputFile(),
         ],
         run=[TempFile("binary")],
         kattis="Prolog",
-        mise_tool="swiprolog@8.4.2",
+        mise_tool="swiprolog@9.0.4",
     ),
 }
 
