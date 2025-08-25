@@ -110,7 +110,7 @@ COMPILERS = {
     "python2": lambda: python_compiler("python2", "2"),
     "python3": lambda: python_compiler("python3", "3"),
     "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.16"),
-    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.10-7.3.16"),
+    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.10-7.3.19"),
     "ocaml": lambda: CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
@@ -177,7 +177,7 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.83.0",
+            "1.87.0",
             "rustc",
             "-C",
             "opt-level=3",
@@ -185,7 +185,8 @@ COMPILERS = {
             "target-cpu=native",
             "--crate-type",
             "bin",
-            "--edition=2021",
+            "--edition",
+            "2021",
             InputFile(),
             "-o",
             TempFile("binary"),
