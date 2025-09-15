@@ -527,15 +527,19 @@ def compare_outputs(
     return False
 
 
-def get_problems_url(contest_url: str) -> str | None:
+def get_problems_url(contest_url: str | None) -> str | None:
     paths = ["/standings", "/problems", "/help", "/submit"]
 
-    if contest_url:
+    if contest_url is not None:
         for path in paths:
             if contest_url.endswith(path):
                 contest_url = contest_url[: -len(path)]
                 break
 
+    if contest_url is None:
+        contest_url = KATTIS_CFG.get("kattis", "contesturl", fallback=None)
+
+    if contest_url is not None:
         if contest_url[-1] != "/":
             contest_url += "/"
 
@@ -550,7 +554,7 @@ def get_problems_url(contest_url: str) -> str | None:
 PROBLEM_ID_RE = re.compile(r'<a href="[^"]*/problems/([^"]+)"')
 
 
-def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
+def get_contest_problem_id(problem_letter: str, contest_url: str | None) -> str | None:
     problems_url = get_problems_url(contest_url)
     if problems_url is None:
         return None
@@ -592,7 +596,7 @@ def get_contest_problem_id(problem_letter: str, contest_url: str) -> str | None:
     return None
 
 
-def guess_problem_id(path: Path, contest_url: str) -> str | None:
+def guess_problem_id(path: Path, contest_url: str | None) -> str | None:
     m = re.search(r"^[a-z0-9]+", path.stem)
     if m:
         return m.group()
