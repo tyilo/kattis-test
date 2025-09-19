@@ -444,6 +444,9 @@ def normalize_output(s: str) -> str:
     return "\n".join([line.strip() for line in s.strip().split("\n")])
 
 
+INT_RE = re.compile(r"^-?\d+$")
+
+
 def get_float_diff(s1: str, s2: str) -> tuple[float, float] | None:
     reld = 0
     absd = 0
@@ -462,6 +465,8 @@ def get_float_diff(s1: str, s2: str) -> tuple[float, float] | None:
         for v1, v2 in zip(vs1, vs2):
             if v1 == v2:
                 continue
+            if INT_RE.match(v1) and INT_RE.match(v2):
+                return None
 
             try:
                 f1 = float(v1)
