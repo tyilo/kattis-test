@@ -177,7 +177,7 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.87.0",
+            "1.91.0",
             "rustc",
             "-C",
             "opt-level=3",
