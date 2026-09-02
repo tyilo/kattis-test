@@ -115,15 +115,16 @@ def python_compiler(
     )
 
 
-OCAML_TOOL = "ocaml@4.14.1"
+# Requires https://github.com/asdf-community/asdf-ocaml plugin
+OCAML_TOOL = "ocaml@5.4.0"
 
 
 COMPILERS = {
     "binary": lambda: CompilerInfo(compile=None, run=[InputFiles()], kattis=None),
     "python2": lambda: python_compiler("python2", "2"),
     "python3": lambda: python_compiler("python3", "3"),
-    "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.16"),
-    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.11-7.3.19"),
+    "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.23"),
+    "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.11-7.3.23"),
     "ocaml": lambda: CompilerInfo(
         compile=None,
         run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFiles()],
@@ -190,7 +191,7 @@ COMPILERS = {
         compile=[
             "rustup",
             "run",
-            "1.91.0",
+            "1.96.1",
             "rustc",
             "-C",
             "opt-level=3",
@@ -228,7 +229,7 @@ COMPILERS = {
             InputFiles(),
         ],
         kattis="PHP",
-        mise_tool="php@8.3.6",
+        mise_tool="php@8.5.4",
     ),
     "perl": lambda: CompilerInfo(
         compile=["perl", "-c", InputFiles()],
@@ -237,7 +238,7 @@ COMPILERS = {
             InputFiles(),
         ],
         kattis="Perl",
-        mise_tool="perl@5.38.2",
+        mise_tool="perl@5.40.1",
     ),
     "prolog": lambda: CompilerInfo(
         compile=[
@@ -255,7 +256,8 @@ COMPILERS = {
         ],
         run=[TempFile("binary")],
         kattis="Prolog",
-        mise_tool="swiprolog@9.0.4",
+        # Requires https://github.com/mracos/asdf-swiprolog plugin
+        mise_tool="swiprolog@9.2.9",
     ),
     "java": lambda: CompilerInfo(
         compile=[
