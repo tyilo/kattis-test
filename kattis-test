@@ -2,6 +2,7 @@
 import os
 import re
 import resource
+import shutil
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from collections.abc import Iterator
@@ -21,7 +22,7 @@ from subprocess import (
     check_output,
     run,
 )
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from time import time
 from typing import Any
 from urllib.error import HTTPError
@@ -36,6 +37,8 @@ CONTEST_CACHE_DIR = CACHE_DIR / "contests"
 KATTIS_CFG = ConfigParser()
 KATTIS_CFG.read(Path.home() / ".kattisrc")
 
+MEMORY_LIMIT_MB = 1024
+
 
 class SamplesNotFoundError(Exception):
     pass
@@ -47,7 +50,17 @@ class InputFile:
 
 
 @dataclass
+class MainClass:
+    pass
+
+
+@dataclass
 class TempFile:
+    name: str
+
+
+@dataclass
+class TempDir:
     name: str
 
 
@@ -244,6 +257,22 @@ COMPILERS = {
         kattis="Prolog",
         mise_tool="swiprolog@9.0.4",
     ),
+    "java": lambda: CompilerInfo(
+        compile=["javac", "-encoding", "UTF-8", "-d", TempDir("out"), InputFile()],
+        run=[
+            "java",
+            "-Dfile.encoding=UTF-8",
+            "-XX:+UseSerialGC",
+            "-Xss64m",
+            f"-Xms{MEMORY_LIMIT_MB}m",
+            f"-Xmx{MEMORY_LIMIT_MB}m",
+            "-cp",
+            TempDir("out"),
+            MainClass(),
+        ],
+        kattis="Java",
+        mise_tool="java@temurin-25.0.3",
+    ),
 }
 
 
@@ -254,6 +283,7 @@ DEFAULT_COMPILERS = {
     ".rs": "rust",
     ".php": "php",
     ".pl": "prolog",
+    ".java": "java",
 }
 
 
@@ -327,12 +357,14 @@ class Compiler:
         mise_tool: str | None,
         debug: bool,
         compile_flags: list[str],
+        main_class: str | None,
     ) -> None:
         self.input_file = str(Path(input_file).absolute())
         self.compile_cmd = compile_cmd
         self.run_cmd = run_cmd
         self.debug = debug
         self.compile_flags = compile_flags
+        self.main_class = main_class
 
         self.bin_path = None
         if mise_tool is not None:
@@ -349,16 +381,23 @@ class Compiler:
 
     def __enter__(self) -> "Compiler":
         self.tempfiles = {}
+        self.tempdirs = {}
         for arg in (self.compile_cmd or []) + self.run_cmd:
             if isinstance(arg, TempFile):
                 if arg.name not in self.tempfiles:
                     self.tempfiles[arg.name] = NamedTemporaryFile(delete=False).name
+            if isinstance(arg, TempDir):
+                if arg.name not in self.tempdirs:
+                    self.tempdirs[arg.name] = TemporaryDirectory(delete=False).name
 
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         for fname in self.tempfiles.values():
             os.remove(fname)
+
+        for dirname in self.tempdirs.values():
+            shutil.rmtree(dirname)
 
     def transform_arg(self, arg: Arg) -> list[str]:
         if isinstance(arg, DebugArg):
@@ -372,6 +411,16 @@ class Compiler:
 
         if isinstance(arg, TempFile):
             return [self.tempfiles[arg.name]]
+
+        if isinstance(arg, TempDir):
+            return [self.tempdirs[arg.name]]
+
+        if isinstance(arg, MainClass):
+            if self.main_class is None:
+                raise ValueError(
+                    "main class couldn't be guessed, please specify with -m/--mainclass"
+                )
+            return [self.main_class]
 
         return [arg]
 
@@ -652,6 +701,13 @@ def guess_language(path: Path) -> str | None:
     return None
 
 
+def guess_main_class(path: Path) -> str | None:
+    if path.suffix == ".java":
+        return path.stem
+
+    return None
+
+
 def file_path(filename: str) -> Path:
     if filename == "-":
         return Path("/dev/stdin")
@@ -695,6 +751,12 @@ def main() -> int:
 
     parser.add_argument(
         "-p", "--problem-id", dest="problem_id", help="set the problem id"
+    )
+    parser.add_argument(
+        "-m",
+        "--mainclass",
+        dest="main_class",
+        help="Sets mainclass. Overrides default guess (first part of first filename)",
     )
     parser.add_argument(
         "-l",
@@ -784,6 +846,8 @@ def main() -> int:
         print(f"I don't know how to compile/run {args.file}", file=sys.stderr)
         return 1
 
+    main_class = args.main_class or guess_main_class(args.file)
+
     compiler = COMPILERS[language]()
 
     if args.sample_file:
@@ -834,12 +898,13 @@ def main() -> int:
 
     all_correct = True
     with Compiler(
-        args.file,
-        compiler.compile,
-        compiler.run,
-        compiler.mise_tool,
-        args.debug,
-        compile_flags,
+        input_file=args.file,
+        compile_cmd=compiler.compile,
+        run_cmd=compiler.run,
+        mise_tool=compiler.mise_tool,
+        debug=args.debug,
+        compile_flags=compile_flags,
+        main_class=main_class,
     ) as c:
         print("Compiling...")
         c.compile()
@@ -904,12 +969,21 @@ def main() -> int:
             return 1
 
         else:
+            if main_class is not None:
+                main_class_args = [
+                    "--mainclass",
+                    main_class,
+                ]
+            else:
+                main_class_args = []
+
             p = run(
                 [
                     "kattis",
                     args.file,
                     "--language",
                     kattis_language,
+                    *main_class_args,
                     "--problem",
                     problem_id,
                 ],
