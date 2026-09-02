@@ -2,7 +2,7 @@ import java.util.Scanner;
 
 public class nsum {
     public static void main(String[] args) {
-/* Note that scanner can be very slow on large inputs. Consider using a buffered reader such as the KattIO library if the problem has large inputs*/ 
+/* Note that scanner can be very slow on large inputs. Consider using a buffered reader such as the KattIO library if the problem has large inputs*/
         Scanner sc = new Scanner(System.in);
         int n = sc.nextInt();
         int answer = 0;

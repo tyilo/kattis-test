@@ -45,7 +45,7 @@ class SamplesNotFoundError(Exception):
 
 
 @dataclass
-class InputFile:
+class InputFiles:
     pass
 
 
@@ -77,7 +77,7 @@ class Sample:
     output: Path | None
 
 
-Arg = str | InputFile | TempFile | DebugArg
+Arg = str | InputFiles | MainClass | TempFile | TempDir | DebugArg
 
 
 @dataclass
@@ -108,8 +108,8 @@ def python_compiler(
     binary_name: str, version: str, mise_tool: str | None = None
 ) -> CompilerInfo:
     return CompilerInfo(
-        compile=[binary_name, "-m", "py_compile", InputFile()],
-        run=[binary_name, InputFile()],
+        compile=[binary_name, "-m", "py_compile", InputFiles()],
+        run=[binary_name, InputFiles()],
         kattis=f"Python {version}",
         mise_tool=mise_tool,
     )
@@ -119,14 +119,14 @@ OCAML_TOOL = "ocaml@4.14.1"
 
 
 COMPILERS = {
-    "binary": lambda: CompilerInfo(compile=None, run=[InputFile()], kattis=None),
+    "binary": lambda: CompilerInfo(compile=None, run=[InputFiles()], kattis=None),
     "python2": lambda: python_compiler("python2", "2"),
     "python3": lambda: python_compiler("python3", "3"),
     "pypy2": lambda: python_compiler("pypy", "2", "python@pypy2.7-7.3.16"),
     "pypy3": lambda: python_compiler("pypy3", "3", "python@pypy3.11-7.3.19"),
     "ocaml": lambda: CompilerInfo(
         compile=None,
-        run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFile()],
+        run=["ocaml", "unix.cma", "str.cma", "bigarray.cma", InputFiles()],
         kattis="OCaml",
         mise_tool=OCAML_TOOL,
     ),
@@ -139,7 +139,7 @@ COMPILERS = {
             "unix.cmxa",
             "str.cmxa",
             "bigarray.cmxa",
-            InputFile(),
+            InputFiles(),
             "-o",
             TempFile("binary"),
         ],
@@ -157,7 +157,7 @@ COMPILERS = {
             DebugArg("-static", False),
             DebugArg("-fsanitize=undefined,address"),
             "-lm",
-            InputFile(),
+            InputFiles(),
             "-o",
             TempFile("binary"),
         ],
@@ -179,7 +179,7 @@ COMPILERS = {
             "-lpthread",
             DebugArg("-Wl,--no-whole-archive", False),
             DebugArg("-fsanitize=undefined,address"),
-            InputFile(),
+            InputFiles(),
             "-o",
             TempFile("binary"),
         ],
@@ -200,7 +200,7 @@ COMPILERS = {
             "bin",
             "--edition",
             "2021",
-            InputFile(),
+            InputFiles(),
             "-o",
             TempFile("binary"),
         ],
@@ -216,7 +216,7 @@ COMPILERS = {
             "-d",
             "html_errors=0",
             "-l",
-            InputFile(),
+            InputFiles(),
         ],
         run=[
             "php",
@@ -225,16 +225,16 @@ COMPILERS = {
             "display_errors=stderr",
             "-d",
             "html_errors=0",
-            InputFile(),
+            InputFiles(),
         ],
         kattis="PHP",
         mise_tool="php@8.3.6",
     ),
     "perl": lambda: CompilerInfo(
-        compile=["perl", "-c", InputFile()],
+        compile=["perl", "-c", InputFiles()],
         run=[
             "perl",
-            InputFile(),
+            InputFiles(),
         ],
         kattis="Perl",
         mise_tool="perl@5.38.2",
@@ -251,14 +251,24 @@ COMPILERS = {
             "-o",
             TempFile("binary"),
             "-c",
-            InputFile(),
+            InputFiles(),
         ],
         run=[TempFile("binary")],
         kattis="Prolog",
         mise_tool="swiprolog@9.0.4",
     ),
     "java": lambda: CompilerInfo(
-        compile=["javac", "-encoding", "UTF-8", "-d", TempDir("out"), InputFile()],
+        compile=[
+            "javac",
+            "-encoding",
+            "UTF-8",
+            # Ensure we don't pick use any other files
+            "-sourcepath",
+            TempDir("tmp"),
+            "-d",
+            TempDir("out"),
+            InputFiles(),
+        ],
         run=[
             "java",
             "-Dfile.encoding=UTF-8",
@@ -351,7 +361,7 @@ class Compiler:
 
     def __init__(
         self,
-        input_file: str,
+        input_files: list[str],
         compile_cmd: list[Arg] | None,
         run_cmd: list[Arg],
         mise_tool: str | None,
@@ -359,7 +369,7 @@ class Compiler:
         compile_flags: list[str],
         main_class: str | None,
     ) -> None:
-        self.input_file = str(Path(input_file).absolute())
+        self.input_files = [str(Path(f).absolute()) for f in input_files]
         self.compile_cmd = compile_cmd
         self.run_cmd = run_cmd
         self.debug = debug
@@ -406,8 +416,8 @@ class Compiler:
             else:
                 return []
 
-        if isinstance(arg, InputFile):
-            return [self.input_file]
+        if isinstance(arg, InputFiles):
+            return self.input_files
 
         if isinstance(arg, TempFile):
             return [self.tempfiles[arg.name]]
@@ -831,22 +841,24 @@ def main() -> int:
         default=1e-7,
         help="set float diff tolerance (default: 1e-7)",
     )
-    parser.add_argument("file", type=file_path)
+    parser.add_argument("files", nargs="+", type=file_path)
 
     args = parser.parse_args()
 
-    problem_id = args.problem_id or guess_problem_id(args.file, args.contest_url)
+    main_file = args.files[0]
+
+    problem_id = args.problem_id or guess_problem_id(main_file, args.contest_url)
     if not problem_id:
         print("Couldn't guess problem id from filename", file=sys.stderr)
         return 1
 
-    language = args.lang or guess_language(args.file)
+    language = args.lang or guess_language(main_file)
 
     if not language:
-        print(f"I don't know how to compile/run {args.file}", file=sys.stderr)
+        print(f"I don't know how to compile/run {main_file}", file=sys.stderr)
         return 1
 
-    main_class = args.main_class or guess_main_class(args.file)
+    main_class = args.main_class or guess_main_class(main_file)
 
     compiler = COMPILERS[language]()
 
@@ -898,7 +910,7 @@ def main() -> int:
 
     all_correct = True
     with Compiler(
-        input_file=args.file,
+        input_files=args.files,
         compile_cmd=compiler.compile,
         run_cmd=compiler.run,
         mise_tool=compiler.mise_tool,
@@ -980,12 +992,13 @@ def main() -> int:
             p = run(
                 [
                     "kattis",
-                    args.file,
                     "--language",
                     kattis_language,
                     *main_class_args,
                     "--problem",
                     problem_id,
+                    "--",
+                    *args.files,
                 ],
                 input=b"y\n",
             )
