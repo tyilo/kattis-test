@@ -216,6 +216,8 @@ COMPILERS = {
             "display_errors=stderr",
             "-d",
             "html_errors=0",
+            "-d",
+            f"memory_limit={MEMORY_LIMIT_MB}m",
             "-l",
             InputFiles(),
         ],
